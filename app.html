@@ -71,6 +71,8 @@
     .mag{font-size:2.6rem;font-weight:600;padding:.2rem 1.4rem 0;font-variant-numeric:tabular-nums}
     .mag small{font-size:.9rem;color:var(--ink-3);font-weight:400;margin-left:.4rem;font-family:var(--font-mono)}
     .summary{padding:.4rem 1.4rem 0;color:var(--ink-2);line-height:1.55;font-size:.95rem}
+    .recsince{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-4);margin-top:.6rem;letter-spacing:.03em}
+    .recsince:empty{display:none}
     .genflag{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;
       color:var(--ink-4);margin-top:.5rem}
     .meta{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;padding:1.2rem 1.4rem 0}
@@ -128,6 +130,7 @@
     </div>
     <div class="honesty">
       <span class="chip"><span class="d"></span><span id="p-precision"></span></span>
+      <div class="recsince" id="p-recsince"></div>
       <div id="p-impact-list"></div>
       <p id="p-impact"></p>
     </div>
@@ -332,6 +335,10 @@
       $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
       $("p-magtype").textContent = (p.source || "").toUpperCase() || "—";
       $("p-precision").textContent = (p.geom_precision || "").replace(/_/g, " ");
+      // "recorded since" honesty: how far back this event's feed stream reaches (never overclaimed).
+      $("p-recsince").textContent = p.record_begins
+        ? "This record reaches back to " + p.record_begins.slice(0, 4)
+        : "";
       // impact honesty: itemized facts when the source recorded them; otherwise absence shown AS
       // DATA, never as an implied zero — worded per source.
       const impactHtml = renderImpact(p.impact);
