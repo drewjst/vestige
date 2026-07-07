@@ -41,6 +41,9 @@
     .legend .ln{display:inline-block;width:15px;height:0;border-top:2px solid var(--track);
       box-shadow:0 0 6px var(--track);margin-right:.4rem;vertical-align:middle}
     .legend .ct{color:var(--track)}
+    .legend .cy{color:var(--beacon)}
+    .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
+      background:rgba(255,171,61,.12);margin-right:.4rem;vertical-align:middle}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -68,6 +71,16 @@
     .chip .d{width:6px;height:6px;border-radius:50%;background:var(--beacon)}
     .honesty p{margin:.7rem 0 0;font-size:.82rem;color:var(--ink-3);line-height:1.5}
     .honesty p b{color:var(--ink-2);font-weight:500}
+    #p-impact-list{margin-top:.2rem}
+    .impact-h{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
+      color:var(--ink-3);margin-bottom:.5rem}
+    .impact-h span{color:var(--ink-4);text-transform:none;letter-spacing:0}
+    .impact-row{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem;padding:.3rem 0;
+      border-top:1px solid var(--line)}
+    .impact-row:first-of-type{border-top:0}
+    .impact-row .ik{color:var(--ink-3)}
+    .impact-row .iv{color:var(--ink);font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
+    .impact-prov{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-4);margin-top:.6rem;line-height:1.4}
     .src{margin:auto 1.4rem 1.4rem;padding-top:1rem}
     .src a{font-family:var(--font-mono);font-size:.76rem;color:var(--beacon);text-decoration:none;
       border:1px solid var(--line-2);border-radius:8px;padding:.5rem .8rem;display:inline-flex;gap:.4rem}
@@ -80,11 +93,12 @@
   <div id="map"></div>
   <header>
     <span class="dia"></span><span class="wm">Vestige</span>
-    <span class="sub">western North Carolina &middot; earthquakes &amp; cyclone tracks</span>
+    <span class="sub">western North Carolina &middot; earthquakes &middot; cyclone tracks &middot; county storm impacts</span>
   </header>
   <div class="legend">
     <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
     <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
+    <span class="cty"></span><b class="cy">County impact</b> (NOAA Storm Events)<br>
     click any event
   </div>
 
@@ -102,6 +116,7 @@
     </div>
     <div class="honesty">
       <span class="chip"><span class="d"></span><span id="p-precision"></span></span>
+      <div id="p-impact-list"></div>
       <p id="p-impact"></p>
     </div>
     <div class="src">
@@ -123,12 +138,30 @@
       zoom: 6.3,
       attributionControl: { compact: true }
     });
+    window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
 
     map.on("load", async () => {
       const fc = await (await fetch(API_BASE + "/api/events")).json();
       // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
       // render at the precision it actually has — a track never becomes a pin, a point never a line.
       map.addSource("events", { type: "geojson", data: fc });
+
+      // County attribution: a zone-collected event has NO measured geometry — it borrows its
+      // county polygon (design-lock). A DASHED outline + faint fill deliberately reads as an
+      // administrative attribution, NEVER a measured extent or a pinpoint. Drawn first (under all).
+      map.addLayer({
+        id: "counties-fill", type: "fill", source: "events",
+        filter: ["==", ["get", "geom_precision"], "county"],
+        paint: { "fill-color": "#ffab3d", "fill-opacity": 0.05 }
+      });
+      map.addLayer({
+        id: "counties-line", type: "line", source: "events",
+        filter: ["==", ["get", "geom_precision"], "county"],
+        paint: {
+          "line-color": "#ffab3d", "line-opacity": 0.55,
+          "line-width": 1.2, "line-dasharray": [2, 1.6]
+        }
+      });
 
       // Cyclone best-track: a LINE we observed. Cool blue, drawn under the amber quake points.
       map.addLayer({
@@ -158,12 +191,26 @@
           "circle-stroke-width": 1, "circle-stroke-color": "rgba(8,10,15,.7)"
         }
       });
-      for (const id of ["quakes", "tracks"]) {
+      // counties-fill is listed last so a click on a Buncombe pin (drawn on top) wins over the
+      // underlying county polygon at the same point.
+      for (const id of ["counties-fill", "tracks", "quakes"]) {
         map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
         map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
-        map.on("click", id, (e) => showDossier(e.features[0].properties));
+        map.on("click", id, (e) => openEvent(e.features[0].properties.event_id));
       }
     });
+
+    // Fetch full event detail (carries itemized impact) before opening the dossier — the
+    // collection is kept lean, so impact lives on the per-event endpoint.
+    async function openEvent(eventId) {
+      try {
+        const feat = await (await fetch(API_BASE + "/api/event/" + encodeURIComponent(eventId))).json();
+        showDossier(feat.properties);
+      } catch (err) {
+        console.error("failed to load event", eventId, err);
+      }
+    }
+    window.openEvent = openEvent;  // programmatic deep-link to an event dossier (share URLs, tests)
 
     const $ = (id) => document.getElementById(id);
     const panel = $("panel");
@@ -175,9 +222,33 @@
     // What each source can and cannot tell you — used to word impact-absence truthfully per source.
     const IMPACT_SILENCE = {
       usgs: "USGS catalogs magnitude and location, not casualties or damage",
-      ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses"
+      ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses",
+      storm_events: "this source records location and intensity, not itemized impact"
     };
-    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report" };
+    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report", storm_events: "NCEI Storm Events record" };
+
+    // Human labels for the itemized event_impact kinds. Damage kinds render as as-recorded USD.
+    const IMPACT_LABEL = {
+      deaths_direct: "Direct deaths", deaths_indirect: "Indirect deaths",
+      injuries_direct: "Direct injuries", injuries_indirect: "Indirect injuries",
+      damage_property: "Property damage", damage_crops: "Crop damage"
+    };
+
+    // Render the itemized impact facts EXACTLY as recorded — one row per kind, never summed into a
+    // total (design-lock: a summed place total is a number in no source). Returns "" if none.
+    function renderImpact(impact) {
+      if (!Array.isArray(impact) || impact.length === 0) return "";
+      const rows = impact.map((i) => {
+        const isDmg = i.kind.startsWith("damage");
+        const val = isDmg
+          ? "$" + i.value_raw + (i.damage_year ? " · " + i.damage_year + " USD" : "")
+          : i.value_raw;
+        return `<div class="impact-row"><span class="ik">${IMPACT_LABEL[i.kind] || i.kind}</span>` +
+               `<span class="iv">${val}</span></div>`;
+      }).join("");
+      const prov = impact[0].provenance ? `<div class="impact-prov">${impact[0].provenance}</div>` : "";
+      return `<div class="impact-h">Recorded impact <span>(itemized — never summed)</span></div>` + rows + prov;
+    }
 
     function showDossier(p) {
       const generated = truthy(p, "narrative_is_generated");
@@ -185,8 +256,11 @@
       const isQuake = p.hazard_class === "earthquake";
       $("p-class").textContent = (p.hazard_type || "event").replace(/_/g, " ");
       // "M" is a magnitude prefix — only earthquakes get it; a 120 kt cyclone must never read "M120".
-      const iv = p.intensity_value ?? "?";
-      $("p-mag").innerHTML = (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
+      // Many storm events carry no intensity at all — show nothing rather than a fabricated "?".
+      const iv = p.intensity_value;
+      $("p-mag").innerHTML = (iv === null || iv === undefined)
+        ? ""
+        : (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
       $("p-summary").textContent = p.narrative || "";
       $("p-gen").textContent = generated ? "⚙ Summary generated from the source below" : "";
       // p.time is already the canonical UTC ISO string — display it directly, don't re-parse
@@ -194,11 +268,19 @@
       $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
       $("p-magtype").textContent = (p.source || "").toUpperCase() || "—";
       $("p-precision").textContent = (p.geom_precision || "").replace(/_/g, " ");
-      // impact honesty: absence shown AS DATA, never as an implied zero — worded per source.
+      // impact honesty: itemized facts when the source recorded them; otherwise absence shown AS
+      // DATA, never as an implied zero — worded per source.
+      const impactHtml = renderImpact(p.impact);
       const silence = IMPACT_SILENCE[p.source] || "this source records location and intensity, not impact";
-      $("p-impact").innerHTML = hasImpact
-        ? "<b>Impact:</b> recorded — see source."
-        : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+      $("p-impact-list").innerHTML = impactHtml;
+      if (impactHtml) {
+        $("p-impact").style.display = "none";
+      } else {
+        $("p-impact").style.display = "";
+        $("p-impact").innerHTML = hasImpact
+          ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
+          : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+      }
       // source trail: link straight to the server-provided authoritative record (no client derivation).
       const link = $("p-srclink");
       if (p.source_url) {
