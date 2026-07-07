@@ -112,8 +112,10 @@
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
-    // Vestige read API (separate deploy). Override with the deployed API origin in prod.
-    const API_BASE = "http://localhost:8000";
+    // Vestige read API (separate deploy): localhost in dev, the deployed Cloud Run URL in prod.
+    const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+      ? "http://localhost:8000"
+      : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
     const map = new maplibregl.Map({
       container: "map",
       style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
