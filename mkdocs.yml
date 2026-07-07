@@ -1,0 +1,28 @@
+site_name: Vestige
+site_description: A historical atlas of extreme natural-hazard events — every place keeps a record.
+site_url: https://drewjst.github.io/vestige/
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: black
+    accent: amber
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Data sources: data-sources.md
+  - The honesty model: honesty-model.md
+  - Running locally: running.md
+  - API: api.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences

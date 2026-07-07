@@ -1,0 +1,35 @@
+name: deploy-web
+on:
+  push:
+    branches: [main]
+    paths: ["index.html", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation
+
+jobs:
+  deploy:
+    # No-op until infra is applied and repo variables are set (see vestige-api infra runbook).
+    if: vars.GCP_PROJECT != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload to GCS
+        run: |
+          gsutil -h "Cache-Control:no-cache, max-age=60" cp index.html "gs://${{ vars.WEB_BUCKET }}/index.html"
+
+      - name: Invalidate CDN (if the LB exists)
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache vestige-web-urlmap --path "/*" --async \
+            || echo "no CDN url-map (web_domain unset) — skipping invalidate"
