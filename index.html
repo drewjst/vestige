@@ -130,6 +130,11 @@
   .chip .dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:.5rem; vertical-align:middle}
   .trust{margin-top:2.4rem; font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; color:var(--ink-4); text-transform:uppercase; opacity:0; animation:rise .9s .8s forwards}
   .trust b{color:var(--ink-3); font-weight:500}
+  .live{margin-top:.9rem; font-family:var(--font-mono); font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; display:flex; align-items:center; gap:.55rem; opacity:0; transition:opacity .6s}
+  .live.show{opacity:1}
+  .live .pulse{width:7px; height:7px; border-radius:50%; background:var(--beacon); box-shadow:0 0 0 0 rgba(255,171,61,.5); animation:pulse 2s infinite; flex:none}
+  .live b{color:var(--ink); font-weight:600}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,171,61,.5)}70%{box-shadow:0 0 0 7px rgba(255,171,61,0)}100%{box-shadow:0 0 0 0 rgba(255,171,61,0)}}
 
   /* legend pinned to hero */
   .legend{
@@ -335,6 +340,7 @@
         <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>Deadliest heat &middot; Phoenix</button>
       </div>
       <div class="trust">Free &middot; public data &mdash; <b>NOAA Storm Events</b> &middot; <b>USGS</b> &middot; <b>FEMA</b> &middot; <b>IBTrACS</b></div>
+      <div class="live" id="live" aria-live="polite"><span class="pulse"></span><span id="live-txt"></span></div>
     </div>
   </div>
   <div class="legend" aria-hidden="true">
@@ -526,6 +532,22 @@
 (function(){
   "use strict";
   var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- live coverage (real numbers from the API, never estimates) ---------- */
+  var API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://localhost:8000"
+    : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
+  (function loadCoverage(){
+    fetch(API_BASE + "/api/coverage").then(function(r){ return r.json(); }).then(function(c){
+      var live = document.getElementById("live"), txt = document.getElementById("live-txt");
+      if(!live || !txt || !c.totals) return;
+      var floors = (c.feeds || []).map(function(f){ return +(f.temporal_floor||"9999").slice(0,4); });
+      var since = floors.length ? Math.min.apply(null, floors) : null;
+      txt.innerHTML = "Live &middot; <b>" + c.totals.events + "</b> recorded events across <b>" +
+        (c.feeds ? c.feeds.length : 0) + "</b> feeds" + (since ? " &middot; back to <b>" + since + "</b>" : "");
+      live.classList.add("show");
+    }).catch(function(){ /* landing stays fine without the live line */ });
+  })();
 
   /* ---------- toast ---------- */
   var toastEl = document.getElementById("toast"), tTimer;
