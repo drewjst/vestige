@@ -1,360 +1,754 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vestige — western North Carolina · earthquakes + Helene's track</title>
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <style>
-    :root{
-      --bg:#080a0f; --panel:#0e1219; --panel-2:#131824;
-      --line:rgba(150,172,190,.14); --line-2:rgba(150,172,190,.24);
-      --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#586472;
-      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff;
-      --font-body:"Avenir Next","Avenir",system-ui,sans-serif;
-      --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%}
-    body{background:var(--bg);color:var(--ink);font-family:var(--font-body);overflow:hidden}
-    #map{position:absolute;inset:0}
-    .maplibregl-popup{display:none}
-
-    header{
-      position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:.7rem;
-      padding:.7rem 1rem;background:linear-gradient(180deg,rgba(8,10,15,.9),transparent);
-      pointer-events:none;
-    }
-    .dia{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);
-      box-shadow:0 0 12px 1px rgba(255,171,61,.55)}
-    .wm{font-weight:600;letter-spacing:.32em;font-size:.78rem;text-transform:uppercase}
-    header .sub{font-family:var(--font-mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.04em}
-
-    .legend{
-      position:absolute;left:1rem;bottom:1rem;z-index:5;font-family:var(--font-mono);font-size:.68rem;
-      color:var(--ink-2);background:rgba(11,14,20,.66);border:1px solid var(--line);border-radius:10px;
-      padding:.6rem .8rem;backdrop-filter:blur(8px);line-height:1.7;max-width:15rem;
-    }
-    .legend b{color:var(--beacon)}
-    .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--quake);
-      box-shadow:0 0 8px 1px var(--quake);margin-right:.4rem;vertical-align:middle}
-    .legend .ln{display:inline-block;width:15px;height:0;border-top:2px solid var(--track);
-      box-shadow:0 0 6px var(--track);margin-right:.4rem;vertical-align:middle}
-    .legend .ct{color:var(--track)}
-    .legend .cy{color:var(--beacon)}
-    .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
-      background:rgba(255,171,61,.12);margin-right:.4rem;vertical-align:middle}
-
-    aside{
-      position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
-      background:linear-gradient(180deg,var(--panel),var(--bg));border-left:1px solid var(--line);
-      transform:translateX(100%);transition:transform .35s cubic-bezier(.2,.7,.2,1);
-      display:flex;flex-direction:column;
-    }
-    aside.open{transform:none}
-    /* the event dossier stacks ABOVE the county dossier when you drill from county -> event */
-    aside#panel{z-index:7}
-    aside#county-panel{z-index:6}
-    .clist{padding:1rem 1.4rem 1.4rem;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem}
-    .crow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.55rem .7rem;
-      border:1px solid var(--line);border-radius:8px;cursor:pointer;background:rgba(20,25,36,.4)}
-    .crow:hover{border-color:var(--line-2);background:rgba(20,25,36,.75)}
-    .crow .htype{font-size:.86rem;text-transform:capitalize}
-    .crow .cmeta{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
-    .crow .hdate{font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
-    .crow .cflag{font-family:var(--font-mono);font-size:.56rem;color:var(--beacon);letter-spacing:.04em}
-    .p-head{display:flex;justify-content:space-between;align-items:flex-start;padding:1.4rem 1.4rem 0}
-    .eyebrow{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
-    #close{background:none;border:0;color:var(--ink-3);font-size:1.4rem;cursor:pointer;line-height:1}
-    #close:hover{color:var(--ink)}
-    .mag{font-size:2.6rem;font-weight:600;padding:.2rem 1.4rem 0;font-variant-numeric:tabular-nums}
-    .mag small{font-size:.9rem;color:var(--ink-3);font-weight:400;margin-left:.4rem;font-family:var(--font-mono)}
-    .summary{padding:.4rem 1.4rem 0;color:var(--ink-2);line-height:1.55;font-size:.95rem}
-    .genflag{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;
-      color:var(--ink-4);margin-top:.5rem}
-    .meta{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;padding:1.2rem 1.4rem 0}
-    .meta .k{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}
-    .meta .v{font-size:.92rem;margin-top:.15rem;font-variant-numeric:tabular-nums}
-    .honesty{margin:1.2rem 1.4rem 0;padding:.9rem 1rem;border:1px solid var(--line);border-radius:10px;
-      background:rgba(20,25,36,.5)}
-    .chip{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.66rem;
-      border:1px solid var(--line-2);border-radius:999px;padding:.25rem .6rem;color:var(--ink-2)}
-    .chip .d{width:6px;height:6px;border-radius:50%;background:var(--beacon)}
-    .honesty p{margin:.7rem 0 0;font-size:.82rem;color:var(--ink-3);line-height:1.5}
-    .honesty p b{color:var(--ink-2);font-weight:500}
-    #p-impact-list{margin-top:.2rem}
-    .impact-h{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
-      color:var(--ink-3);margin-bottom:.5rem}
-    .impact-h span{color:var(--ink-4);text-transform:none;letter-spacing:0}
-    .impact-row{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem;padding:.3rem 0;
-      border-top:1px solid var(--line)}
-    .impact-row:first-of-type{border-top:0}
-    .impact-row .ik{color:var(--ink-3)}
-    .impact-row .iv{color:var(--ink);font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
-    .impact-prov{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-4);margin-top:.6rem;line-height:1.4}
-    .src{margin:auto 1.4rem 1.4rem;padding-top:1rem}
-    .src a{font-family:var(--font-mono);font-size:.76rem;color:var(--beacon);text-decoration:none;
-      border:1px solid var(--line-2);border-radius:8px;padding:.5rem .8rem;display:inline-flex;gap:.4rem}
-    .src a:hover{border-color:var(--beacon)}
-    .src .lbl{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
-      color:var(--ink-4);display:block;margin-bottom:.5rem}
-  </style>
+  <title>Vestige — a historical atlas of extreme weather</title>
+  <meta name="description" content="Search any place and see the hurricanes, floods, fires, tornadoes, quakes, and heat that shaped it — extreme-weather history mapped from the public record." />
 </head>
 <body>
-  <div id="map"></div>
-  <header>
-    <span class="dia"></span><span class="wm">Vestige</span>
-    <span class="sub">western North Carolina &middot; earthquakes &middot; cyclone tracks &middot; county storm impacts</span>
-  </header>
-  <div class="legend">
-    <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
-    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
-    <span class="cty"></span><b class="cy">County impact</b> (NOAA Storm Events)<br>
-    click any event
+<style>
+  /* ============ VESTIGE &mdash; landing concept ============ */
+  :root{
+    --bg:#080a0f; --bg-2:#0b0e14; --panel:#0e1219; --panel-2:#131824;
+    --line:rgba(150,172,190,.12); --line-2:rgba(150,172,190,.22);
+    --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#556170;
+    --beacon:#ffab3d; --beacon-2:#ffc873; --beacon-ink:#1c1305;
+    --hz-cyclone:#47d6e6; --hz-flood:#4d84ff; --hz-quake:#f6b23c;
+    --hz-fire:#ff5d38; --hz-heat:#ff5ca2; --hz-winter:#8fb9d8;
+    --hz-tornado:#86dfa0; --hz-hail:#c9d3dd; --hz-drought:#d79a52;
+    --font-display:"Didot","Bodoni 72","Hoefler Text",Georgia,"Times New Roman",serif;
+    --font-body:"Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
+    --wrap:1200px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); font-size:17px; line-height:1.65;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  ::selection{background:rgba(255,171,61,.28); color:#fff}
+  a{color:inherit; text-decoration:none}
+  h1,h2,h3{margin:0; font-family:var(--font-display); font-weight:400; text-wrap:balance; letter-spacing:-.01em}
+  p{margin:0}
+  :focus-visible{outline:2px solid var(--beacon); outline-offset:3px; border-radius:2px}
+
+  .wrap{max-width:var(--wrap); margin:0 auto; padding-inline:clamp(1.25rem,5vw,3.5rem)}
+  .mono{font-family:var(--font-mono)}
+  .eyebrow{
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--ink-3);
+  }
+  .beacon-txt{color:var(--beacon)}
+
+  /* grain + vignette atmosphere */
+  body::after{
+    content:""; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:.04;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ============ NAV ============ */
+  .nav{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; gap:1.5rem;
+    padding:.85rem clamp(1.25rem,5vw,3.5rem);
+    background:linear-gradient(180deg,rgba(8,10,15,.92),rgba(8,10,15,.55) 70%,transparent);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:center; gap:.6rem; font-weight:500}
+  .brand .dia{
+    width:11px; height:11px; transform:rotate(45deg); border-radius:2px;
+    background:var(--beacon); box-shadow:0 0 14px 1px rgba(255,171,61,.55);
+  }
+  .brand .wm{font-family:var(--font-body); font-weight:600; letter-spacing:.34em; font-size:.82rem; text-transform:uppercase}
+  .nav .links{display:flex; gap:1.65rem; margin-left:1rem}
+  .nav .links a{font-size:.9rem; color:var(--ink-2); transition:color .2s}
+  .nav .links a:hover{color:var(--ink)}
+  .nav .right{margin-left:auto; display:flex; align-items:center; gap:1.1rem}
+  .nav .coord{font-family:var(--font-mono); font-size:.72rem; color:var(--ink-3); letter-spacing:.02em}
+  .btn{
+    font-family:var(--font-body); font-size:.86rem; font-weight:600; cursor:pointer;
+    border:0; border-radius:999px; padding:.62rem 1.15rem; transition:transform .15s, box-shadow .2s, background .2s;
+  }
+  .btn-beacon{background:var(--beacon); color:var(--beacon-ink); box-shadow:0 0 0 rgba(255,171,61,0)}
+  .btn-beacon:hover{transform:translateY(-1px); box-shadow:0 8px 26px -8px rgba(255,171,61,.6)}
+  .btn-ghost{background:transparent; color:var(--ink); border:1px solid var(--line-2)}
+  .btn-ghost:hover{border-color:var(--ink-3)}
+
+  /* ============ HERO ============ */
+  .hero{position:relative; min-height:94vh; display:flex; align-items:center; isolation:isolate; overflow:hidden}
+  #atlas{position:absolute; inset:0; width:100%; height:100%; z-index:-2}
+  .hero::before{ /* scrim for legibility on the copy side */
+    content:""; position:absolute; inset:0; z-index:-1;
+    background:
+      radial-gradient(120% 90% at 82% 30%,transparent 40%,rgba(8,10,15,.35) 100%),
+      linear-gradient(90deg,rgba(8,10,15,.94) 0%,rgba(8,10,15,.8) 34%,rgba(8,10,15,.28) 62%,transparent 100%),
+      linear-gradient(0deg,rgba(8,10,15,.9),transparent 30%);
+  }
+  .hero .wrap{width:100%; padding-block:6rem 4rem}
+  .hero-copy{max-width:44rem}
+  .hero .eyebrow{opacity:0; animation:rise .8s .1s forwards}
+  .hero h1{
+    font-size:clamp(2.9rem,7.2vw,5.9rem); line-height:.98; letter-spacing:-.025em;
+    margin:1.1rem 0 0; opacity:0; animation:rise .9s .22s forwards;
+  }
+  .hero h1 em{font-style:italic; color:var(--beacon-2)}
+  .hero .lead{
+    max-width:34rem; margin-top:1.5rem; font-size:clamp(1.06rem,1.5vw,1.28rem);
+    color:var(--ink-2); line-height:1.6; opacity:0; animation:rise .9s .38s forwards;
+  }
+  .search{
+    display:flex; gap:.5rem; margin-top:2rem; max-width:33rem;
+    opacity:0; animation:rise .9s .52s forwards;
+  }
+  .search .field{
+    flex:1; display:flex; align-items:center; gap:.6rem;
+    background:rgba(18,23,34,.72); border:1px solid var(--line-2); border-radius:12px;
+    padding:.5rem .5rem .5rem .9rem; backdrop-filter:blur(6px);
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .search .field:focus-within{border-color:var(--beacon); box-shadow:0 0 0 3px rgba(255,171,61,.14)}
+  .search svg{flex:none; color:var(--ink-3)}
+  .search input{
+    flex:1; border:0; background:transparent; color:var(--ink); font-family:var(--font-body);
+    font-size:1rem; padding:.35rem 0;
+  }
+  .search input::placeholder{color:var(--ink-4)}
+  .search input:focus{outline:none}
+  .go{flex:none; width:40px; height:40px; display:grid; place-items:center; border-radius:9px; background:var(--beacon); color:var(--beacon-ink); border:0; cursor:pointer; transition:transform .15s}
+  .go:hover{transform:translateX(2px)}
+  .chips{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.15rem; opacity:0; animation:rise .9s .66s forwards}
+  .chip{
+    font-family:var(--font-mono); font-size:.76rem; color:var(--ink-2); cursor:pointer;
+    border:1px solid var(--line); border-radius:999px; padding:.4rem .8rem; background:rgba(14,18,25,.5);
+    transition:border-color .2s, color .2s, background .2s;
+  }
+  .chip:hover{border-color:var(--line-2); color:var(--ink); background:rgba(20,25,36,.7)}
+  .chip .dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:.5rem; vertical-align:middle}
+  .trust{margin-top:2.4rem; font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; color:var(--ink-4); text-transform:uppercase; opacity:0; animation:rise .9s .8s forwards}
+  .trust b{color:var(--ink-3); font-weight:500}
+
+  /* legend pinned to hero */
+  .legend{
+    position:absolute; right:clamp(1.25rem,5vw,3.5rem); bottom:2rem; z-index:2;
+    display:grid; grid-template-columns:auto auto; gap:.35rem 1.1rem;
+    padding:.85rem 1rem; border:1px solid var(--line); border-radius:12px;
+    background:rgba(11,14,20,.6); backdrop-filter:blur(8px);
+    font-family:var(--font-mono); font-size:.7rem; color:var(--ink-2); letter-spacing:.04em;
+    opacity:0; animation:rise 1s 1s forwards;
+  }
+  .legend span{display:flex; align-items:center; gap:.5rem}
+  .legend i{width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px 1px currentColor}
+
+  @keyframes rise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:translateY(0)}}
+
+  /* ============ generic section ============ */
+  .band{padding-block:clamp(5rem,11vh,9rem); border-top:1px solid var(--line); position:relative}
+  .lede-h{font-size:clamp(2rem,4.4vw,3.3rem); line-height:1.04; margin-top:1rem; max-width:20ch}
+  .section-head{max-width:60ch}
+  .section-head p{color:var(--ink-2); margin-top:1.15rem; max-width:52ch}
+
+  /* HOOK / pull quote */
+  .hook{text-align:left}
+  .hook .pq{
+    font-family:var(--font-display); font-size:clamp(1.7rem,3.7vw,3rem); line-height:1.14;
+    max-width:24ch; letter-spacing:-.015em;
+  }
+  .hook .pq .u{color:var(--beacon-2); font-style:italic}
+  .hook .body{display:grid; grid-template-columns:1.1fr .9fr; gap:2.5rem 4rem; align-items:end; margin-top:2.5rem}
+  .hook .body p{color:var(--ink-2)}
+  .hook .body p + p{color:var(--ink-3); font-size:.95rem}
+
+  /* DOSSIER */
+  .dossier .tabs{display:flex; gap:.4rem; margin-top:1.6rem; flex-wrap:wrap}
+  .tab{font-family:var(--font-mono); font-size:.78rem; letter-spacing:.04em; color:var(--ink-3); cursor:pointer; padding:.4rem .8rem; border-radius:8px; border:1px solid transparent; transition:.2s}
+  .tab[aria-selected="true"]{color:var(--ink); border-color:var(--line-2); background:var(--panel)}
+  .tab:hover{color:var(--ink-2)}
+
+  .profile{
+    margin-top:2rem; border:1px solid var(--line); border-radius:18px; overflow:hidden;
+    background:linear-gradient(180deg,var(--panel),var(--bg-2));
+  }
+  .profile-top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:1.5rem; padding:1.6rem 1.8rem; border-bottom:1px solid var(--line)}
+  .profile-top .place{font-family:var(--font-display); font-size:clamp(1.5rem,3vw,2.1rem)}
+  .profile-top .co{font-family:var(--font-mono); font-size:.76rem; color:var(--ink-3); margin-top:.35rem; letter-spacing:.04em}
+  .stats{display:flex; gap:1.8rem; flex-wrap:wrap}
+  .stat .n{font-family:var(--font-display); font-size:clamp(1.35rem,2.4vw,1.9rem); font-variant-numeric:tabular-nums}
+  .stat .n.warn{color:var(--beacon-2)}
+  .stat .k{font-family:var(--font-mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-4); margin-top:.2rem}
+
+  /* timeline */
+  .timeline{padding:1.5rem 1.8rem; border-bottom:1px solid var(--line)}
+  .tl-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1.1rem}
+  .tl-head .yr{font-family:var(--font-display); font-size:1.6rem; color:var(--beacon-2); font-variant-numeric:tabular-nums}
+  .tl-head .hint{font-family:var(--font-mono); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-4)}
+  .rail{position:relative; height:46px; cursor:ew-resize; touch-action:none; user-select:none}
+  .rail .base{position:absolute; top:50%; left:0; right:0; height:2px; background:var(--line-2); transform:translateY(-50%)}
+  .rail .fill{position:absolute; top:50%; left:0; height:2px; background:linear-gradient(90deg,var(--beacon),var(--beacon-2)); transform:translateY(-50%)}
+  .rail .tick{position:absolute; top:50%; width:2px; height:16px; background:var(--ink-3); transform:translate(-50%,-50%)}
+  .rail .tick.ev{height:22px; width:3px; border-radius:2px}
+  .rail .tick .lab{position:absolute; bottom:20px; left:50%; transform:translateX(-50%); font-family:var(--font-mono); font-size:.62rem; color:var(--ink-3); white-space:nowrap}
+  .rail .handle{position:absolute; top:50%; width:16px; height:16px; border-radius:50%; background:var(--beacon); border:2px solid #0b0e14; transform:translate(-50%,-50%); box-shadow:0 0 14px 2px rgba(255,171,61,.55)}
+  .rail .yrmark{position:absolute; bottom:-2px; font-family:var(--font-mono); font-size:.6rem; color:var(--ink-4)}
+
+  /* events */
+  .events{display:grid; grid-template-columns:repeat(3,1fr); gap:0}
+  .ev-card{padding:1.5rem 1.6rem; border-right:1px solid var(--line); transition:background .3s}
+  .ev-card:last-child{border-right:0}
+  .ev-card.hot{background:rgba(255,171,61,.05)}
+  .ev-tag{display:inline-flex; align-items:center; gap:.45rem; font-family:var(--font-mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2)}
+  .ev-tag i{width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px 1px currentColor}
+  .ev-card .when{font-family:var(--font-mono); font-size:.7rem; color:var(--ink-4); margin-top:.5rem}
+  .ev-card .name{font-family:var(--font-display); font-size:1.32rem; margin-top:.5rem}
+  .ev-card .desc{font-size:.9rem; color:var(--ink-3); margin-top:.55rem; line-height:1.5}
+  .ev-metrics{display:flex; flex-wrap:wrap; gap:.9rem; margin-top:1rem}
+  .ev-metrics div{font-family:var(--font-mono)}
+  .ev-metrics .mv{font-size:1.02rem; color:var(--ink); font-variant-numeric:tabular-nums}
+  .ev-metrics .mk{font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-4)}
+  .sources{display:flex; gap:.4rem; margin-top:1.1rem; flex-wrap:wrap}
+  .src{font-family:var(--font-mono); font-size:.62rem; letter-spacing:.06em; color:var(--ink-3); border:1px solid var(--line); border-radius:5px; padding:.2rem .45rem}
+  .profile-foot{padding:1rem 1.8rem; font-family:var(--font-mono); font-size:.72rem; color:var(--ink-4); display:flex; justify-content:space-between; flex-wrap:wrap; gap:.5rem}
+  .profile-foot .beacon-txt{cursor:pointer}
+
+  /* HAZARDS grid */
+  .haz-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:2.5rem; background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden}
+  .haz{background:var(--bg); padding:1.6rem 1.5rem; transition:background .25s}
+  .haz:hover{background:var(--panel)}
+  .haz .g{width:30px; height:30px; color:var(--h)}
+  .haz .g svg{width:30px; height:30px; display:block}
+  .haz h3{font-family:var(--font-body); font-weight:600; font-size:1.02rem; letter-spacing:0; margin-top:1rem}
+  .haz p{font-size:.86rem; color:var(--ink-3); margin-top:.4rem; line-height:1.5}
+  .haz .meta{font-family:var(--font-mono); font-size:.64rem; letter-spacing:.06em; color:var(--ink-4); margin-top:.9rem; text-transform:uppercase}
+
+  /* TRENDS */
+  .trend-wrap{display:grid; grid-template-columns:.85fr 1.15fr; gap:3rem; align-items:center; margin-top:2.5rem}
+  .chart{border:1px solid var(--line); border-radius:16px; padding:1.6rem 1.5rem 1.2rem; background:linear-gradient(180deg,var(--panel),var(--bg-2)); overflow-x:auto}
+  .chart .cap{font-family:var(--font-mono); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-4); margin-top:1rem}
+  .bars{display:flex; align-items:flex-end; gap:clamp(.6rem,2vw,1.4rem); height:210px; min-width:min-content}
+  .bar{flex:1; min-width:44px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%}
+  .bar .col{width:100%; border-radius:6px 6px 0 0; background:linear-gradient(180deg,rgba(255,171,61,.85),rgba(255,171,61,.14)); position:relative}
+  .bar.peak .col{background:linear-gradient(180deg,var(--beacon),rgba(255,171,61,.28))}
+  .bar .v{font-family:var(--font-mono); font-size:.8rem; color:var(--ink-2); margin-bottom:.4rem; font-variant-numeric:tabular-nums}
+  .bar.peak .v{color:var(--beacon-2)}
+  .bar .l{font-family:var(--font-mono); font-size:.68rem; color:var(--ink-4); margin-top:.5rem}
+
+  /* DATA / ethos */
+  .src-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; margin-top:2.5rem; background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden}
+  .src-card{background:var(--bg); padding:1.4rem 1.5rem; display:flex; gap:1.1rem; align-items:flex-start}
+  .src-card:hover{background:var(--panel)}
+  .src-card .idx{font-family:var(--font-mono); font-size:.72rem; color:var(--beacon); padding-top:.15rem}
+  .src-card h3{font-family:var(--font-body); font-weight:600; font-size:1rem; letter-spacing:0}
+  .src-card p{font-size:.85rem; color:var(--ink-3); margin-top:.3rem}
+  .src-card .span{font-family:var(--font-mono); font-size:.64rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-4); margin-top:.55rem}
+
+  /* CTA */
+  .cta{text-align:center; border-top:1px solid var(--line)}
+  .cta h2{font-size:clamp(2.1rem,5vw,3.6rem); line-height:1.05; max-width:16ch; margin:0 auto}
+  .cta h2 em{font-style:italic; color:var(--beacon-2)}
+  .cta form{display:flex; gap:.5rem; justify-content:center; margin:2.2rem auto 0; max-width:26rem; flex-wrap:wrap}
+  .cta input{flex:1; min-width:12rem; background:var(--panel); border:1px solid var(--line-2); border-radius:11px; padding:.75rem 1rem; color:var(--ink); font-family:var(--font-body); font-size:.95rem}
+  .cta input:focus{outline:none; border-color:var(--beacon)}
+  .cta-actions{display:flex; justify-content:center; margin-top:2.2rem}
+  .cta .note{font-family:var(--font-mono); font-size:.68rem; color:var(--ink-4); margin-top:1.1rem; letter-spacing:.04em}
+
+  footer{border-top:1px solid var(--line); padding:2.5rem 0}
+  footer .row{display:flex; justify-content:space-between; align-items:center; gap:1.5rem; flex-wrap:wrap}
+  footer .links{display:flex; gap:1.4rem; font-family:var(--font-mono); font-size:.74rem; color:var(--ink-3)}
+  footer .fine{font-family:var(--font-mono); font-size:.68rem; color:var(--ink-4); margin-top:1.4rem; line-height:1.7}
+  footer .fine b{color:var(--ink-3); font-weight:500}
+
+  /* toast */
+  .toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2); border:1px solid var(--line-2); color:var(--ink-2);
+    font-family:var(--font-mono); font-size:.78rem; padding:.7rem 1.1rem; border-radius:10px;
+    box-shadow:0 20px 50px -20px rgba(0,0,0,.8); opacity:0; pointer-events:none;
+    transition:opacity .3s, transform .3s; z-index:200; max-width:90vw;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast b{color:var(--beacon)}
+
+  /* reveal on scroll */
+  .rv{opacity:0; transform:translateY(22px); transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+  .rv.in{opacity:1; transform:none}
+
+  /* ============ responsive ============ */
+  @media(max-width:900px){
+    .nav .links,.nav .coord{display:none}
+    .hook .body{grid-template-columns:1fr}
+    .trend-wrap{grid-template-columns:1fr; gap:2rem}
+    .events{grid-template-columns:1fr}
+    .ev-card{border-right:0; border-bottom:1px solid var(--line)}
+    .ev-card:last-child{border-bottom:0}
+    .haz-grid{grid-template-columns:repeat(2,1fr)}
+    .src-grid{grid-template-columns:1fr}
+    .legend{display:none}
+  }
+  @media(max-width:560px){
+    .haz-grid{grid-template-columns:1fr}
+    .stats{gap:1.2rem}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important}
+    .hero .eyebrow,.hero h1,.hero .lead,.search,.chips,.trust,.legend{opacity:1}
+    .rv{opacity:1; transform:none}
+  }
+</style>
+
+<nav class="nav">
+  <div class="brand"><span class="dia" aria-hidden="true"></span><span class="wm">Vestige</span></div>
+  <div class="links">
+    <a href="app.html">Atlas</a>
+    <a href="#hazards">Hazards</a>
+    <a href="#trends">Trends</a>
+    <a href="#data">Data</a>
   </div>
+  <div class="right">
+    <span class="coord" id="navcoord">28.00&deg;N 82.53&deg;W &middot; TAMPA</span>
+    <a class="btn btn-beacon" href="app.html">Open the map &rarr;</a>
+  </div>
+</nav>
 
-  <aside id="panel">
-    <div class="p-head">
-      <span class="eyebrow" id="p-class">Earthquake</span>
-      <button id="close" aria-label="Close">&times;</button>
+<header class="hero">
+  <canvas id="atlas" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <div class="hero-copy">
+      <div class="eyebrow">Historical atlas &nbsp;&middot;&nbsp; extreme weather &nbsp;&middot;&nbsp; drawn from public record</div>
+      <h1>Every place<br>remembers a <em>storm.</em></h1>
+      <p class="lead">Search any point on Earth and see the hurricanes, floods, fires, tornadoes, quakes, and heat that shaped it &mdash; three-quarters of a century of extreme-weather history, mapped from the public record.</p>
+      <div class="search">
+        <label class="field">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input id="q" type="text" placeholder="Search a city, county, coastline, or coordinate&hellip;" aria-label="Search a place">
+        </label>
+        <a class="go" href="app.html" aria-label="Open the map">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </a>
+      </div>
+      <div class="chips" id="chips">
+        <button class="chip"><span class="dot" style="background:var(--hz-cyclone)"></span>Hurricane history &middot; Houston</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-tornado)"></span>Every tornado within 100 mi of Nashville</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-flood)"></span>What flooded Asheville</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>Deadliest heat &middot; Phoenix</button>
+      </div>
+      <div class="trust">Free &middot; public data &mdash; <b>NOAA Storm Events</b> &middot; <b>USGS</b> &middot; <b>FEMA</b> &middot; <b>IBTrACS</b></div>
     </div>
-    <div class="mag" id="p-mag"></div>
-    <div class="summary" id="p-summary"></div>
-    <div class="genflag" id="p-gen"></div>
-    <div class="meta">
-      <div><div class="k">When (UTC)</div><div class="v" id="p-when"></div></div>
-      <div><div class="k">Source</div><div class="v" id="p-magtype"></div></div>
-    </div>
-    <div class="honesty">
-      <span class="chip"><span class="d"></span><span id="p-precision"></span></span>
-      <div id="p-impact-list"></div>
-      <p id="p-impact"></p>
-    </div>
-    <div class="src">
-      <span class="lbl">Source trail</span><br>
-      <a id="p-srclink" href="#" target="_blank" rel="noopener">USGS record &rarr;</a>
-    </div>
-  </aside>
+  </div>
+  <div class="legend" aria-hidden="true">
+    <span style="color:var(--hz-cyclone)"><i></i>Tropical cyclone</span>
+    <span style="color:var(--hz-quake)"><i></i>Earthquake</span>
+    <span style="color:var(--hz-fire)"><i></i>Wildfire</span>
+    <span style="color:var(--hz-flood)"><i></i>Flood</span>
+    <span style="color:var(--hz-heat)"><i></i>Heat wave</span>
+    <span style="color:var(--hz-tornado)"><i></i>Tornado</span>
+  </div>
+</header>
 
-  <aside id="county-panel">
-    <div class="p-head">
-      <span class="eyebrow">County · NOAA Storm Events</span>
-      <button id="cclose" aria-label="Close">&times;</button>
+<!-- HOOK -->
+<section class="band hook">
+  <div class="wrap">
+    <p class="pq rv">Most places carry a disaster history that <span class="u">no one has ever really seen.</span></p>
+    <div class="body">
+      <p class="rv">Weather apps tell you about tomorrow. Almost nothing tells you what a place has already lived through. Vestige is the memory layer &mdash; every recorded extreme event, where it struck, what it cost, and the public sources that prove it.</p>
+      <p class="rv">Not forecasts. Not opinions. A record. The kind of thing you want before you buy a house, write a story, plan a season, or simply understand the ground under your feet.</p>
     </div>
-    <div class="mag" id="c-name"></div>
-    <div class="summary" id="c-count"></div>
-    <div class="clist" id="c-list"></div>
-  </aside>
+  </div>
+</section>
 
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-  <script>
-    // Vestige read API (separate deploy): localhost in dev, the deployed Cloud Run URL in prod.
-    const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
-      ? "http://localhost:8000"
-      : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
-    const map = new maplibregl.Map({
-      container: "map",
-      style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-      center: [-82.3, 35.85],
-      zoom: 6.3,
-      attributionControl: { compact: true }
+<!-- DOSSIER -->
+<section class="band dossier" id="dossier">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow rv">A single place, fully remembered</div>
+      <h2 class="lede-h rv">What you'd find under Houston.</h2>
+    </div>
+    <div class="tabs rv" role="tablist" aria-label="Example places">
+      <span class="tab" role="tab" aria-selected="true">Houston, TX</span>
+      <span class="tab" role="tab" aria-selected="false" data-toast="place">Asheville, NC</span>
+      <span class="tab" role="tab" aria-selected="false" data-toast="place">New Orleans, LA</span>
+      <span class="tab" role="tab" aria-selected="false" data-toast="place">Joplin, MO</span>
+    </div>
+
+    <div class="profile rv">
+      <div class="profile-top">
+        <div>
+          <div class="place">Houston &middot; Harris County, Texas</div>
+          <div class="co">29.76&deg; N, 95.37&deg; W &nbsp;&middot;&nbsp; coastal plain &nbsp;&middot;&nbsp; record begins 1950</div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="n">438</div><div class="k">Recorded events</div></div>
+          <div class="stat"><div class="n">75</div><div class="k">Years on file</div></div>
+          <div class="stat"><div class="n warn">$180B+</div><div class="k">Est. damage</div></div>
+          <div class="stat"><div class="n warn">Harvey</div><div class="k">Costliest</div></div>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <div class="tl-head">
+          <span class="yr" id="tlYear">2017</span>
+          <span class="hint">&larr; drag to travel through the record &rarr;</span>
+        </div>
+        <div class="rail" id="rail" role="slider" aria-label="Year" aria-valuemin="1950" aria-valuemax="2025" aria-valuenow="2017" tabindex="0">
+          <div class="base"></div>
+          <div class="fill" id="tlFill"></div>
+          <div class="tick" style="left:8%"></div><div class="tick" style="left:20%"></div>
+          <div class="tick" style="left:31%"></div><div class="tick" style="left:44%"></div>
+          <div class="tick" style="left:58%"></div><div class="tick" style="left:70%"></div>
+          <div class="tick ev" data-year="2001" style="left:68%; background:var(--hz-flood); color:var(--hz-flood)"><span class="lab">Allison &rsquo;01</span></div>
+          <div class="tick ev" data-year="2008" style="left:77.3%; background:var(--hz-cyclone); color:var(--hz-cyclone)"><span class="lab">Ike &rsquo;08</span></div>
+          <div class="tick ev" data-year="2017" style="left:89.3%; background:var(--beacon); color:var(--beacon)"><span class="lab">Harvey &rsquo;17</span></div>
+          <div class="handle" id="tlHandle" style="left:89.3%"></div>
+          <span class="yrmark" style="left:0">1950</span>
+          <span class="yrmark" style="right:0">2025</span>
+        </div>
+      </div>
+
+      <div class="events" id="events">
+        <div class="ev-card" data-year="2017">
+          <span class="ev-tag" style="color:var(--beacon-2)"><i></i>Tropical cyclone &middot; flood</span>
+          <div class="when">26 Aug &ndash; 2 Sep 2017</div>
+          <div class="name">Hurricane Harvey</div>
+          <p class="desc">Stalled over the metro for four days and dropped more rain than any storm in U.S. history. A third of Harris County went underwater.</p>
+          <div class="ev-metrics">
+            <div><div class="mv">60.6&Prime;</div><div class="mk">Peak rain</div></div>
+            <div><div class="mv">$125B</div><div class="mk">Damage</div></div>
+            <div><div class="mv">68</div><div class="mk">Deaths &middot; TX</div></div>
+          </div>
+          <div class="sources"><span class="src">NOAA</span><span class="src">FEMA DR-4332</span><span class="src">USGS</span></div>
+        </div>
+        <div class="ev-card" data-year="2008">
+          <span class="ev-tag" style="color:var(--hz-cyclone)"><i></i>Tropical cyclone &middot; surge</span>
+          <div class="when">13 Sep 2008</div>
+          <div class="name">Hurricane Ike</div>
+          <p class="desc">Came ashore at Galveston as a strong Category 2, pushing a surge across the bay and knocking out power to millions for weeks.</p>
+          <div class="ev-metrics">
+            <div><div class="mv">110 mph</div><div class="mk">Winds</div></div>
+            <div><div class="mv">$38B</div><div class="mk">Damage</div></div>
+            <div><div class="mv">15 ft</div><div class="mk">Surge</div></div>
+          </div>
+          <div class="sources"><span class="src">IBTrACS</span><span class="src">NOAA</span><span class="src">FEMA</span></div>
+        </div>
+        <div class="ev-card" data-year="2001">
+          <span class="ev-tag" style="color:var(--hz-flood)"><i></i>Tropical storm &middot; flood</span>
+          <div class="when">5 &ndash; 9 Jun 2001</div>
+          <div class="name">Tropical Storm Allison</div>
+          <p class="desc">Never a hurricane, yet one of the costliest to ever hit the U.S. &mdash; proof that the category number never tells the whole story.</p>
+          <div class="ev-metrics">
+            <div><div class="mv">40&Prime;</div><div class="mk">Peak rain</div></div>
+            <div><div class="mv">$9B</div><div class="mk">Damage</div></div>
+            <div><div class="mv">23</div><div class="mk">Deaths</div></div>
+          </div>
+          <div class="sources"><span class="src">NOAA</span><span class="src">FEMA DR-1379</span></div>
+        </div>
+      </div>
+
+      <div class="profile-foot">
+        <span>Similar nearby: <span class="beacon-txt" data-toast="place">Galveston 1900</span> &middot; <span class="beacon-txt" data-toast="place">Tax Day Flood 2016</span> &middot; <span class="beacon-txt" data-toast="place">Rita 2005</span></span>
+        <span>438 events &middot; figures from public record, illustrative</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HAZARDS -->
+<section class="band" id="hazards">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow rv">One map &middot; every extreme</div>
+      <h2 class="lede-h rv">Every kind of extreme, in one record.</h2>
+      <p class="rv">Global coverage for the hazards with clean public data everywhere &mdash; cyclones and earthquakes &mdash; and deep, event-level history across the United States for the rest.</p>
+    </div>
+    <div class="haz-grid rv" id="hazgrid"></div>
+  </div>
+</section>
+
+<!-- TRENDS -->
+<section class="band" id="trends">
+  <div class="wrap">
+    <div class="trend-wrap">
+      <div class="section-head">
+        <div class="eyebrow rv">Not just where &middot; when</div>
+        <h2 class="lede-h rv">Watch it change.</h2>
+        <p class="rv">The map remembers decades, not headlines. Pull back and the pattern is hard to unsee &mdash; the events that break records are arriving closer together.</p>
+      </div>
+      <div class="chart rv">
+        <div class="bars" id="bars"></div>
+        <div class="cap">U.S. billion-dollar disaster events, by decade &middot; NOAA NCEI, CPI-adjusted &middot; 2020s through 2024</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DATA / ETHOS -->
+<section class="band" id="data">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow rv">Why it's free</div>
+      <h2 class="lede-h rv">Public record, public map.</h2>
+      <p class="rv">Every event here comes from data your taxes already paid for. The map stays free &mdash; no ads, no paywall on the past. Deeper tools for journalists, planners, and researchers can come later, and keep it running. The public memory stays public.</p>
+    </div>
+    <div class="src-grid rv">
+      <div class="src-card"><span class="idx">01</span><div><h3>NOAA Storm Events</h3><p>U.S. severe weather &mdash; tornadoes, hail, floods, heat, winter storms &mdash; with damage, deaths, and narratives.</p><div class="span">United States &middot; 1950 &rarr; present</div></div></div>
+      <div class="src-card"><span class="idx">02</span><div><h3>IBTrACS</h3><p>Global best-track archive of every tropical cyclone &mdash; position and intensity, every few hours.</p><div class="span">Global &middot; 1842 &rarr; present</div></div></div>
+      <div class="src-card"><span class="idx">03</span><div><h3>USGS Earthquakes</h3><p>The global seismic catalog &mdash; magnitude, depth, and location, as GeoJSON.</p><div class="span">Global &middot; historical &rarr; live</div></div></div>
+      <div class="src-card"><span class="idx">04</span><div><h3>FEMA &middot; OpenFEMA</h3><p>Federal disaster declarations and assistance &mdash; the official record of what was declared a disaster, and where.</p><div class="span">United States &middot; 1953 &rarr; present</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="band cta">
+  <div class="wrap">
+    <h2>See what your world<br>has <em>been through.</em></h2>
+    <div class="cta-actions">
+      <a class="btn btn-beacon" href="app.html">Open the map &rarr;</a>
+    </div>
+    <p class="note">Now live &middot; a first slice: western North Carolina &amp; Hurricane Helene &middot; more feeds coming</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <div class="brand"><span class="dia" aria-hidden="true"></span><span class="wm">Vestige</span></div>
+      <div class="links"><a href="app.html">Atlas</a><a href="#data" data-toast="soon">Sources</a><a href="#" data-toast="soon">About</a><a href="#" data-toast="soon">API</a></div>
+    </div>
+    <p class="fine"><b>Vestige</b> &mdash; a historical atlas of extreme weather, built for curiosity. Early atlas live &mdash; western North Carolina first &middot; 2026.</p>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- toast ---------- */
+  var toastEl = document.getElementById("toast"), tTimer;
+  var MSG = {
+    search:"This is a static concept &mdash; the atlas isn't live <b>yet</b>.",
+    early:"Noted. There's no signup <b>yet</b> &mdash; this is a design mock.",
+    place:"In the real atlas, this opens that place's full record.",
+    soon:"Concept only &mdash; no page behind this <b>yet</b>.",
+    cta:"Thanks &mdash; but this is a mock. Nothing was sent."
+  };
+  function toast(key){
+    if(!toastEl) return;
+    toastEl.innerHTML = MSG[key] || "Static concept.";
+    toastEl.classList.add("show");
+    clearTimeout(tTimer); tTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2600);
+  }
+  document.addEventListener("click", function(e){
+    var t = e.target.closest("[data-toast]");
+    if(t){ e.preventDefault(); toast(t.getAttribute("data-toast")); }
+  });
+  document.getElementById("chips").addEventListener("click", function(e){
+    if(e.target.closest(".chip")) window.location.href = "app.html";
+  });
+  var qEl = document.getElementById("q");
+  if(qEl) qEl.addEventListener("keydown", function(e){ if(e.key === "Enter") window.location.href = "app.html"; });
+
+  /* ---------- hazards ---------- */
+  var HAZ = [
+    ["cyclone","Tropical cyclones","Hurricanes, typhoons & their tracks, worldwide.","Global &middot; IBTrACS",
+      '<circle cx="15" cy="15" r="3.2"/><path d="M15 11.8c4.2-2 8.4.4 7.2 4.6" fill="none"/><path d="M15 18.2c-4.2 2-8.4-.4-7.2-4.6" fill="none"/>'],
+    ["tornado","Tornadoes","Every touchdown, path, and rating on record.","U.S. &middot; NOAA",
+      '<path d="M6 8h18M8.5 13h13M11 18h8M13.5 22.5h3" fill="none"/>'],
+    ["flood","Floods","Flash floods, river floods, coastal surge.","U.S. &middot; NOAA / USGS",
+      '<path d="M6 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0M6 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0" fill="none"/>'],
+    ["quake","Earthquakes","Magnitude, depth, and epicenter, everywhere.","Global &middot; USGS",
+      '<path d="M5 15h3l2-7 3 14 3-11 2 4h4" fill="none"/>'],
+    ["fire","Wildfires","Large fires, burn scars, and perimeters.","U.S. &middot; public data",
+      '<path d="M15 6c2.5 4 5.5 5 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2 .8-3.4 2-4.5.8 2.2 2 2.6 3.2 1.5-1.2-2.2-.8-4.6.3-6.5z" fill="none"/>'],
+    ["heat","Heat waves","Record highs, streaks, and heat mortality.","U.S. &middot; NOAA",
+      '<circle cx="15" cy="15" r="4" fill="none"/><path d="M15 6v3M15 21v3M6 15h3M21 15h3M9 9l2 2M19 19l2 2M21 9l-2 2M9 21l2-2" fill="none"/>'],
+    ["winter","Winter storms","Blizzards, ice, and cold-air outbreaks.","U.S. &middot; NOAA",
+      '<path d="M15 6v18M7 10l16 10M23 10L7 20M15 6l-2.5 2.5M15 6l2.5 2.5M15 24l-2.5-2.5M15 24l2.5-2.5" fill="none"/>'],
+    ["hail","Hail","Damaging hail by size and swath.","U.S. &middot; NOAA",
+      '<circle cx="12" cy="11" r="2.4" fill="none"/><circle cx="19" cy="14" r="2.4" fill="none"/><circle cx="13" cy="19" r="2.4" fill="none"/>'],
+    ["drought","Drought","Multi-year dry spells and their reach.","U.S. &middot; public data",
+      '<path d="M6 13h18M9 13l-1.5 8M15 13v9M21 13l1.5 8M12.5 13l.5 5M18 13l-.5 5" fill="none"/>']
+  ];
+  var hg = document.getElementById("hazgrid");
+  HAZ.forEach(function(h){
+    var el = document.createElement("div");
+    el.className = "haz"; el.style.setProperty("--h","var(--hz-"+h[0]+")");
+    el.innerHTML =
+      '<div class="g"><svg viewBox="0 0 30 30" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">'+h[4]+'</svg></div>'+
+      '<h3>'+h[1]+'</h3><p>'+h[2]+'</p><div class="meta">'+h[3]+'</div>';
+    hg.appendChild(el);
+  });
+
+  /* ---------- trends bars ---------- */
+  var DEC = [["1980s",33],["1990s",57],["2000s",67],["2010s",131],["2020s",115]];
+  var maxV = 131, barsEl = document.getElementById("bars");
+  DEC.forEach(function(d,i){
+    var peak = i===DEC.length-2;
+    var b = document.createElement("div");
+    b.className = "bar" + (peak?" peak":"");
+    var h = Math.round(d[1]/maxV*100);
+    b.innerHTML = '<div class="v">'+d[1]+'</div><div class="col" style="height:0" data-h="'+h+'"></div><div class="l">'+d[0]+'</div>';
+    barsEl.appendChild(b);
+  });
+  function growBars(){
+    barsEl.querySelectorAll(".col").forEach(function(c,i){
+      setTimeout(function(){ c.style.transition="height .9s cubic-bezier(.2,.7,.2,1)"; c.style.height=c.getAttribute("data-h")+"%"; }, reduce?0:i*110);
     });
-    window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
+  }
 
-    map.on("load", async () => {
-      const EMPTY_FC = { type: "FeatureCollection", features: [] };
-      const [fc, placesRaw] = await Promise.all([
-        fetch(API_BASE + "/api/events").then(r => r.json()),
-        // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
-        // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
-        fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC)
-      ]);
-      const places = placesRaw && placesRaw.type === "FeatureCollection" ? placesRaw : EMPTY_FC;
-      // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
-      // render at the precision it actually has — a track never becomes a pin, a point never a line.
-      map.addSource("events", { type: "geojson", data: fc });
-      // Counties are their OWN source — deduped server-side to one polygon per county — so a county
-      // is drawn ONCE and its fill never darkens with the number of events attached to it.
-      map.addSource("places", { type: "geojson", data: places });
+  /* ---------- timeline scrubber ---------- */
+  var rail=document.getElementById("rail"), handle=document.getElementById("tlHandle"),
+      fill=document.getElementById("tlFill"), yEl=document.getElementById("tlYear"),
+      cards=[].slice.call(document.querySelectorAll("#events .ev-card")),
+      Y0=1950, Y1=2025;
+  function setPct(p){
+    p=Math.max(0,Math.min(100,p));
+    handle.style.left=p+"%"; fill.style.width=p+"%";
+    var yr=Math.round(Y0+(Y1-Y0)*p/100);
+    yEl.textContent=yr; rail.setAttribute("aria-valuenow",yr);
+    var best=null,bd=99;
+    cards.forEach(function(c){ var d=Math.abs((+c.dataset.year)-yr); if(d<bd){bd=d;best=c;} });
+    cards.forEach(function(c){ c.classList.toggle("hot", c===best && bd<=3); });
+  }
+  function fromEvent(e){
+    var r=rail.getBoundingClientRect(), x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    setPct(x/r.width*100);
+  }
+  var dragging=false;
+  rail.addEventListener("pointerdown", function(e){ dragging=true; rail.setPointerCapture(e.pointerId); fromEvent(e); });
+  rail.addEventListener("pointermove", function(e){ if(dragging) fromEvent(e); });
+  rail.addEventListener("pointerup", function(){ dragging=false; });
+  rail.addEventListener("keydown", function(e){
+    var yr=+rail.getAttribute("aria-valuenow"), step=(e.key==="ArrowLeft")?-1:(e.key==="ArrowRight")?1:0;
+    if(step){ e.preventDefault(); yr=Math.max(Y0,Math.min(Y1,yr+step)); setPct((yr-Y0)/(Y1-Y0)*100); }
+  });
+  setPct(89.3);
 
-      // County attribution: a DASHED outline + faint fill deliberately reads as an administrative
-      // attribution, NEVER a measured extent or a pinpoint. Drawn first (under everything else).
-      map.addLayer({
-        id: "counties-fill", type: "fill", source: "places",
-        paint: { "fill-color": "#ffab3d", "fill-opacity": 0.12 }
-      });
-      map.addLayer({
-        id: "counties-line", type: "line", source: "places",
-        paint: {
-          "line-color": "#ffab3d", "line-opacity": 0.6,
-          "line-width": 1.3, "line-dasharray": [2, 1.6]
+  /* ---------- scroll reveal ---------- */
+  var rvs=[].slice.call(document.querySelectorAll(".rv"));
+  if(reduce || !("IntersectionObserver" in window)){
+    rvs.forEach(function(el){ el.classList.add("in"); }); growBars();
+  } else {
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(en){
+        if(en.isIntersecting){
+          en.target.classList.add("in");
+          if(en.target.querySelector && en.target.querySelector("#bars")) growBars();
+          io.unobserve(en.target);
         }
       });
+    },{threshold:.18});
+    rvs.forEach(function(el){ io.observe(el); });
+  }
 
-      // Cyclone best-track: a LINE we observed. Cool blue, drawn under the amber quake points.
-      map.addLayer({
-        id: "tracks", type: "line", source: "events",
-        filter: ["==", ["get", "geom_precision"], "track_line"],
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": "#57c7ff",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 7, 3.6],
-          "line-opacity": 0.9, "line-blur": 0.3
+  /* ---------- nav coordinate ticker ---------- */
+  var PLACES=[["28.00&deg;N 82.53&deg;W","TAMPA"],["29.95&deg;N 90.07&deg;W","NEW ORLEANS"],["35.60&deg;N 82.55&deg;W","ASHEVILLE"],
+    ["36.16&deg;N 86.78&deg;W","NASHVILLE"],["33.45&deg;N 112.07&deg;W","PHOENIX"],["37.77&deg;N 122.42&deg;W","SAN FRANCISCO"],
+    ["14.60&deg;N 120.98&deg;E","MANILA"],["18.47&deg;N 66.11&deg;W","SAN JUAN"]];
+  var nc=document.getElementById("navcoord"), pi=0;
+  if(nc && !reduce){
+    setInterval(function(){ pi=(pi+1)%PLACES.length; nc.style.opacity=".3";
+      setTimeout(function(){ nc.innerHTML=PLACES[pi][0]+" &middot; "+PLACES[pi][1]; nc.style.transition="opacity .4s"; nc.style.opacity="1"; },400);
+    }, 3600);
+  }
+
+  /* ================= HERO CANVAS &mdash; living pressure map ================= */
+  var cv=document.getElementById("atlas"), ctx=cv.getContext("2d"), W=0,H=0,DPR=1;
+  var HUE={cyclone:"#47d6e6",flood:"#4d84ff",quake:"#f6b23c",fire:"#ff5d38",heat:"#ff5ca2",tornado:"#86dfa0"};
+  function resize(){
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  resize(); window.addEventListener("resize", resize);
+
+  // pressure systems (isobars). x,y are fractions of W/H.
+  var SYS=[
+    {x:.70,y:.42,r:38,rings:8,gap:20,warp:.16,spin:.10,hue:"#6fb6c8"},
+    {x:.86,y:.72,r:26,rings:6,gap:19,warp:.22,spin:-.14,hue:"#c98f6a"},
+    {x:.52,y:.74,r:30,rings:6,gap:22,warp:.13,spin:.08,hue:"#5f7fae"},
+    {x:.62,y:.20,r:22,rings:5,gap:18,warp:.2,spin:-.10,hue:"#6fb6c8"}
+  ];
+  // hurricane arcs: start + control + end (fractions)
+  var ARCS=[
+    {a:[.55,.66],c:[.60,.40],b:[.78,.30],hue:HUE.cyclone,sp:.055,ph:0},
+    {a:[.90,.55],c:[.74,.34],b:[.60,.16],hue:HUE.cyclone,sp:.04,ph:.5}
+  ];
+  // event markers
+  var EV=[
+    {x:.78,y:.30,hue:HUE.cyclone,ph:.1},{x:.60,y:.16,hue:HUE.cyclone,ph:.7},
+    {x:.66,y:.52,hue:HUE.fire,ph:.3},{x:.55,y:.60,hue:HUE.fire,ph:.9},
+    {x:.86,y:.72,hue:HUE.quake,ph:.5},{x:.92,y:.60,hue:HUE.quake,ph:.15},
+    {x:.72,y:.68,hue:HUE.flood,ph:.6},{x:.50,y:.44,hue:HUE.flood,ph:.35},
+    {x:.63,y:.80,hue:HUE.heat,ph:.8},{x:.80,y:.46,hue:HUE.heat,ph:.25},
+    {x:.58,y:.34,hue:HUE.tornado,ph:.45},{x:.70,y:.86,hue:HUE.tornado,ph:.05}
+  ];
+  function hexA(hex,a){ var n=parseInt(hex.slice(1),16); return "rgba("+(n>>16&255)+","+(n>>8&255)+","+(n&255)+","+a+")"; }
+  function bez(p,t){ var u=1-t;
+    return [u*u*p.a[0]+2*u*t*p.c[0]+t*t*p.b[0], u*u*p.a[1]+2*u*t*p.c[1]+t*t*p.b[1]]; }
+
+  function drawContours(time){
+    for(var s=0;s<SYS.length;s++){
+      var o=SYS[s], cx=o.x*W, cy=o.y*H;
+      for(var r=1;r<=o.rings;r++){
+        var rad=o.r + r*o.gap*(Math.min(W,H)/620+.55);
+        ctx.beginPath();
+        for(var i=0;i<=60;i++){
+          var ang=i/60*Math.PI*2;
+          var warp=1 + o.warp*Math.sin(ang*3 + time*o.spin + r*.5) + o.warp*.5*Math.cos(ang*2 - time*o.spin*.7);
+          var px=cx+Math.cos(ang)*rad*warp, py=cy+Math.sin(ang)*rad*warp*.82;
+          i?ctx.lineTo(px,py):ctx.moveTo(px,py);
         }
-      });
-      map.addLayer({
-        id: "quakes-glow", type: "circle", source: "events",
-        filter: ["==", ["get", "geom_precision"], "observed_point"],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 8, 5, 34],
-          "circle-color": "#f6b23c", "circle-opacity": 0.14, "circle-blur": 1
-        }
-      });
-      map.addLayer({
-        id: "quakes", type: "circle", source: "events",
-        filter: ["==", ["get", "geom_precision"], "observed_point"],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 3, 5, 13],
-          "circle-color": "#ffbe5c", "circle-opacity": 0.9,
-          "circle-stroke-width": 1, "circle-stroke-color": "rgba(8,10,15,.7)"
-        }
-      });
-      for (const id of ["counties-fill", "tracks", "quakes"]) {
-        map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
-        map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
-      }
-      // A pin/track click opens that event; a county click opens the county dossier (its event list).
-      map.on("click", "tracks", (e) => openEvent(e.features[0].properties.event_id));
-      map.on("click", "quakes", (e) => openEvent(e.features[0].properties.event_id));
-      map.on("click", "counties-fill", (e) => openPlace(e.features[0].properties.place_id));
-    });
-
-    // Fetch full event detail (carries itemized impact) before opening the dossier — the
-    // collection is kept lean, so impact lives on the per-event endpoint.
-    async function openEvent(eventId) {
-      try {
-        const feat = await (await fetch(API_BASE + "/api/event/" + encodeURIComponent(eventId))).json();
-        showDossier(feat.properties);
-      } catch (err) {
-        console.error("failed to load event", eventId, err);
+        ctx.closePath();
+        ctx.strokeStyle=hexA(o.hue, .06*(1-r/(o.rings+2))+.015);
+        ctx.lineWidth=1; ctx.stroke();
       }
     }
-    window.openEvent = openEvent;  // programmatic deep-link to an event dossier (share URLs, tests)
-
-    // A county click opens a place dossier: the county + the list of events recorded there. Each
-    // list row drills into that event's own dossier (which stacks above this panel).
-    async function openPlace(placeId) {
-      try {
-        const place = await (await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId))).json();
-        showCountyDossier(place);
-      } catch (err) {
-        console.error("failed to load place", placeId, err);
-      }
+  }
+  function drawArcs(time){
+    for(var k=0;k<ARCS.length;k++){
+      var p=ARCS[k];
+      // faint full track
+      ctx.beginPath();
+      for(var t=0;t<=1.0001;t+=1/48){ var q=bez(p,t); t?ctx.lineTo(q[0]*W,q[1]*H):ctx.moveTo(q[0]*W,q[1]*H); }
+      ctx.strokeStyle=hexA(p.hue,.10); ctx.lineWidth=1.2; ctx.setLineDash([2,6]); ctx.stroke(); ctx.setLineDash([]);
+      // moving glowing head + short trail
+      var head=((time*p.sp+p.ph)%1+1)%1;
+      ctx.beginPath();
+      for(var tt=Math.max(0,head-.16); tt<=head; tt+=1/60){ var h=bez(p,tt); (tt<=Math.max(0,head-.16)+1e-9)?ctx.moveTo(h[0]*W,h[1]*H):ctx.lineTo(h[0]*W,h[1]*H); }
+      ctx.strokeStyle=hexA(p.hue,.5); ctx.lineWidth=1.6; ctx.lineCap="round"; ctx.stroke();
+      var hp=bez(p,head);
+      var g=ctx.createRadialGradient(hp[0]*W,hp[1]*H,0,hp[0]*W,hp[1]*H,10);
+      g.addColorStop(0,hexA(p.hue,.9)); g.addColorStop(1,hexA(p.hue,0));
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(hp[0]*W,hp[1]*H,10,0,7); ctx.fill();
     }
-    window.openPlace = openPlace;
-
-    const $ = (id) => document.getElementById(id);
-    const panel = $("panel");
-    const countyPanel = $("county-panel");
-    $("close").onclick = () => panel.classList.remove("open");
-    $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); };
-
-    // County dossier: the county + a click-through list of the events recorded there. event_count is
-    // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
-    function showCountyDossier(place) {
-      $("c-name").textContent = place.name + (place.state ? ", " + place.state : "");
-      const n = place.event_count;
-      $("c-count").textContent = n + " recorded " + (n === 1 ? "event" : "events") +
-        " — click one for its dossier";
-      $("c-list").innerHTML = (place.events || []).map((e) => {
-        const type = (e.hazard_type || "event").replace(/_/g, " ");
-        const date = (e.time || "").slice(0, 10);
-        const flag = truthy(e, "impact_source_present") ? '<span class="cflag">impact ✓</span>' : "";
-        return `<div class="crow" data-id="${e.event_id}"><span class="htype">${type}</span>` +
-               `<span class="cmeta"><span class="hdate">${date}</span>${flag}</span></div>`;
-      }).join("");
-      $("c-list").querySelectorAll(".crow").forEach((el) => {
-        el.onclick = () => openEvent(el.dataset.id);
-      });
-      countyPanel.classList.add("open");
+  }
+  function drawEvents(time){
+    for(var i=0;i<EV.length;i++){
+      var e=EV[i], x=e.x*W, y=e.y*H, cyc=(time*.5+e.ph)%1;
+      // pulse ring
+      var rr=6+cyc*30, a=(1-cyc)*.34;
+      ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.strokeStyle=hexA(e.hue,a); ctx.lineWidth=1.2; ctx.stroke();
+      // glow + core
+      var g=ctx.createRadialGradient(x,y,0,x,y,9);
+      g.addColorStop(0,hexA(e.hue,.85)); g.addColorStop(1,hexA(e.hue,0));
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,9,0,7); ctx.fill();
+      ctx.fillStyle=hexA(e.hue,.95); ctx.beginPath(); ctx.arc(x,y,1.8,0,7); ctx.fill();
     }
+  }
+  function frame(ms){
+    var time=ms/1000;
+    ctx.clearRect(0,0,W,H);
+    drawContours(time); drawArcs(time); drawEvents(time);
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  if(reduce) frame(6200); else requestAnimationFrame(frame);
+})();
+</script>
 
-    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
-    const truthy = (o, k) => o[k] === true || o[k] === "true";
-
-    // What each source can and cannot tell you — used to word impact-absence truthfully per source.
-    const IMPACT_SILENCE = {
-      usgs: "USGS catalogs magnitude and location, not casualties or damage",
-      ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses",
-      storm_events: "this source records location and intensity, not itemized impact"
-    };
-    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report", storm_events: "NCEI Storm Events record" };
-
-    // Human labels for the itemized event_impact kinds. Damage kinds render as as-recorded USD.
-    const IMPACT_LABEL = {
-      deaths_direct: "Direct deaths", deaths_indirect: "Indirect deaths",
-      injuries_direct: "Direct injuries", injuries_indirect: "Indirect injuries",
-      damage_property: "Property damage", damage_crops: "Crop damage"
-    };
-
-    // Render the itemized impact facts EXACTLY as recorded — one row per kind, never summed into a
-    // total (design-lock: a summed place total is a number in no source). Returns "" if none.
-    function renderImpact(impact) {
-      if (!Array.isArray(impact) || impact.length === 0) return "";
-      const rows = impact.map((i) => {
-        const isDmg = i.kind.startsWith("damage");
-        const val = isDmg
-          ? "$" + i.value_raw + (i.damage_year ? " · " + i.damage_year + " USD" : "")
-          : i.value_raw;
-        return `<div class="impact-row"><span class="ik">${IMPACT_LABEL[i.kind] || i.kind}</span>` +
-               `<span class="iv">${val}</span></div>`;
-      }).join("");
-      const prov = impact[0].provenance ? `<div class="impact-prov">${impact[0].provenance}</div>` : "";
-      return `<div class="impact-h">Recorded impact <span>(itemized — never summed)</span></div>` + rows + prov;
-    }
-
-    function showDossier(p) {
-      const generated = truthy(p, "narrative_is_generated");
-      const hasImpact = truthy(p, "impact_source_present");
-      const isQuake = p.hazard_class === "earthquake";
-      $("p-class").textContent = (p.hazard_type || "event").replace(/_/g, " ");
-      // "M" is a magnitude prefix — only earthquakes get it; a 120 kt cyclone must never read "M120".
-      // Many storm events carry no intensity at all — show nothing rather than a fabricated "?".
-      const iv = p.intensity_value;
-      $("p-mag").innerHTML = (iv === null || iv === undefined)
-        ? ""
-        : (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
-      $("p-summary").textContent = p.narrative || "";
-      $("p-gen").textContent = generated ? "⚙ Summary generated from the source below" : "";
-      // p.time is already the canonical UTC ISO string — display it directly, don't re-parse
-      // through Date() (which would reinterpret a naive/offset time in the viewer's local zone).
-      $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
-      $("p-magtype").textContent = (p.source || "").toUpperCase() || "—";
-      $("p-precision").textContent = (p.geom_precision || "").replace(/_/g, " ");
-      // impact honesty: itemized facts when the source recorded them; otherwise absence shown AS
-      // DATA, never as an implied zero — worded per source.
-      const impactHtml = renderImpact(p.impact);
-      const silence = IMPACT_SILENCE[p.source] || "this source records location and intensity, not impact";
-      $("p-impact-list").innerHTML = impactHtml;
-      if (impactHtml) {
-        $("p-impact").style.display = "none";
-      } else {
-        $("p-impact").style.display = "";
-        $("p-impact").innerHTML = hasImpact
-          ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
-          : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
-      }
-      // source trail: link straight to the server-provided authoritative record (no client derivation).
-      const link = $("p-srclink");
-      if (p.source_url) {
-        link.href = p.source_url;
-        link.textContent = (SRC_LABEL[p.source] || "Source record") + " →";
-        link.style.display = "";
-      } else {
-        link.style.display = "none";
-      }
-      panel.classList.add("open");
-    }
-  </script>
 </body>
 </html>

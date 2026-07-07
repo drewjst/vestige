@@ -2,7 +2,7 @@ name: deploy-web
 on:
   push:
     branches: [main]
-    paths: ["index.html", ".github/workflows/deploy.yml"]
+    paths: ["index.html", "app.html", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
 
       - name: Upload to GCS
         run: |
-          gsutil -h "Cache-Control:no-cache, max-age=60" cp index.html "gs://${{ vars.WEB_BUCKET }}/index.html"
+          gsutil -h "Cache-Control:no-cache, max-age=60" cp index.html app.html "gs://${{ vars.WEB_BUCKET }}/"
 
       - name: Invalidate CDN (if the LB exists)
         run: |
