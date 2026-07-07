@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vestige — western North Carolina · earthquakes + Helene's track</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    :root{
+      --bg:#080a0f; --panel:#0e1219; --panel-2:#131824;
+      --line:rgba(150,172,190,.14); --line-2:rgba(150,172,190,.24);
+      --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#586472;
+      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff;
+      --font-body:"Avenir Next","Avenir",system-ui,sans-serif;
+      --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+    body{background:var(--bg);color:var(--ink);font-family:var(--font-body);overflow:hidden}
+    #map{position:absolute;inset:0}
+    .maplibregl-popup{display:none}
+
+    header{
+      position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:.7rem;
+      padding:.7rem 1rem;background:linear-gradient(180deg,rgba(8,10,15,.9),transparent);
+      pointer-events:none;
+    }
+    .dia{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);
+      box-shadow:0 0 12px 1px rgba(255,171,61,.55)}
+    .wm{font-weight:600;letter-spacing:.32em;font-size:.78rem;text-transform:uppercase}
+    header .sub{font-family:var(--font-mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.04em}
+
+    .legend{
+      position:absolute;left:1rem;bottom:1rem;z-index:5;font-family:var(--font-mono);font-size:.68rem;
+      color:var(--ink-2);background:rgba(11,14,20,.66);border:1px solid var(--line);border-radius:10px;
+      padding:.6rem .8rem;backdrop-filter:blur(8px);line-height:1.7;max-width:15rem;
+    }
+    .legend b{color:var(--beacon)}
+    .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--quake);
+      box-shadow:0 0 8px 1px var(--quake);margin-right:.4rem;vertical-align:middle}
+    .legend .ln{display:inline-block;width:15px;height:0;border-top:2px solid var(--track);
+      box-shadow:0 0 6px var(--track);margin-right:.4rem;vertical-align:middle}
+    .legend .ct{color:var(--track)}
+
+    aside{
+      position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
+      background:linear-gradient(180deg,var(--panel),var(--bg));border-left:1px solid var(--line);
+      transform:translateX(100%);transition:transform .35s cubic-bezier(.2,.7,.2,1);
+      display:flex;flex-direction:column;
+    }
+    aside.open{transform:none}
+    .p-head{display:flex;justify-content:space-between;align-items:flex-start;padding:1.4rem 1.4rem 0}
+    .eyebrow{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+    #close{background:none;border:0;color:var(--ink-3);font-size:1.4rem;cursor:pointer;line-height:1}
+    #close:hover{color:var(--ink)}
+    .mag{font-size:2.6rem;font-weight:600;padding:.2rem 1.4rem 0;font-variant-numeric:tabular-nums}
+    .mag small{font-size:.9rem;color:var(--ink-3);font-weight:400;margin-left:.4rem;font-family:var(--font-mono)}
+    .summary{padding:.4rem 1.4rem 0;color:var(--ink-2);line-height:1.55;font-size:.95rem}
+    .genflag{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;
+      color:var(--ink-4);margin-top:.5rem}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;padding:1.2rem 1.4rem 0}
+    .meta .k{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}
+    .meta .v{font-size:.92rem;margin-top:.15rem;font-variant-numeric:tabular-nums}
+    .honesty{margin:1.2rem 1.4rem 0;padding:.9rem 1rem;border:1px solid var(--line);border-radius:10px;
+      background:rgba(20,25,36,.5)}
+    .chip{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.66rem;
+      border:1px solid var(--line-2);border-radius:999px;padding:.25rem .6rem;color:var(--ink-2)}
+    .chip .d{width:6px;height:6px;border-radius:50%;background:var(--beacon)}
+    .honesty p{margin:.7rem 0 0;font-size:.82rem;color:var(--ink-3);line-height:1.5}
+    .honesty p b{color:var(--ink-2);font-weight:500}
+    .src{margin:auto 1.4rem 1.4rem;padding-top:1rem}
+    .src a{font-family:var(--font-mono);font-size:.76rem;color:var(--beacon);text-decoration:none;
+      border:1px solid var(--line-2);border-radius:8px;padding:.5rem .8rem;display:inline-flex;gap:.4rem}
+    .src a:hover{border-color:var(--beacon)}
+    .src .lbl{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--ink-4);display:block;margin-bottom:.5rem}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <header>
+    <span class="dia"></span><span class="wm">Vestige</span>
+    <span class="sub">western North Carolina &middot; earthquakes &amp; cyclone tracks</span>
+  </header>
+  <div class="legend">
+    <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
+    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
+    click any event
+  </div>
+
+  <aside id="panel">
+    <div class="p-head">
+      <span class="eyebrow" id="p-class">Earthquake</span>
+      <button id="close" aria-label="Close">&times;</button>
+    </div>
+    <div class="mag" id="p-mag"></div>
+    <div class="summary" id="p-summary"></div>
+    <div class="genflag" id="p-gen"></div>
+    <div class="meta">
+      <div><div class="k">When (UTC)</div><div class="v" id="p-when"></div></div>
+      <div><div class="k">Source</div><div class="v" id="p-magtype"></div></div>
+    </div>
+    <div class="honesty">
+      <span class="chip"><span class="d"></span><span id="p-precision"></span></span>
+      <p id="p-impact"></p>
+    </div>
+    <div class="src">
+      <span class="lbl">Source trail</span><br>
+      <a id="p-srclink" href="#" target="_blank" rel="noopener">USGS record &rarr;</a>
+    </div>
+  </aside>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script>
+    // Vestige read API (separate deploy). Override with the deployed API origin in prod.
+    const API_BASE = "http://localhost:8000";
+    const map = new maplibregl.Map({
+      container: "map",
+      style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+      center: [-82.3, 35.85],
+      zoom: 6.3,
+      attributionControl: { compact: true }
+    });
+
+    map.on("load", async () => {
+      const fc = await (await fetch(API_BASE + "/api/events")).json();
+      // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
+      // render at the precision it actually has — a track never becomes a pin, a point never a line.
+      map.addSource("events", { type: "geojson", data: fc });
+
+      // Cyclone best-track: a LINE we observed. Cool blue, drawn under the amber quake points.
+      map.addLayer({
+        id: "tracks", type: "line", source: "events",
+        filter: ["==", ["get", "geom_precision"], "track_line"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#57c7ff",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 7, 3.6],
+          "line-opacity": 0.9, "line-blur": 0.3
+        }
+      });
+      map.addLayer({
+        id: "quakes-glow", type: "circle", source: "events",
+        filter: ["==", ["get", "geom_precision"], "observed_point"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 8, 5, 34],
+          "circle-color": "#f6b23c", "circle-opacity": 0.14, "circle-blur": 1
+        }
+      });
+      map.addLayer({
+        id: "quakes", type: "circle", source: "events",
+        filter: ["==", ["get", "geom_precision"], "observed_point"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 3, 5, 13],
+          "circle-color": "#ffbe5c", "circle-opacity": 0.9,
+          "circle-stroke-width": 1, "circle-stroke-color": "rgba(8,10,15,.7)"
+        }
+      });
+      for (const id of ["quakes", "tracks"]) {
+        map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
+        map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
+        map.on("click", id, (e) => showDossier(e.features[0].properties));
+      }
+    });
+
+    const $ = (id) => document.getElementById(id);
+    const panel = $("panel");
+    $("close").onclick = () => panel.classList.remove("open");
+
+    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
+    const truthy = (o, k) => o[k] === true || o[k] === "true";
+
+    // What each source can and cannot tell you — used to word impact-absence truthfully per source.
+    const IMPACT_SILENCE = {
+      usgs: "USGS catalogs magnitude and location, not casualties or damage",
+      ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses"
+    };
+    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report" };
+
+    function showDossier(p) {
+      const generated = truthy(p, "narrative_is_generated");
+      const hasImpact = truthy(p, "impact_source_present");
+      const isQuake = p.hazard_class === "earthquake";
+      $("p-class").textContent = (p.hazard_type || "event").replace(/_/g, " ");
+      // "M" is a magnitude prefix — only earthquakes get it; a 120 kt cyclone must never read "M120".
+      const iv = p.intensity_value ?? "?";
+      $("p-mag").innerHTML = (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
+      $("p-summary").textContent = p.narrative || "";
+      $("p-gen").textContent = generated ? "⚙ Summary generated from the source below" : "";
+      // p.time is already the canonical UTC ISO string — display it directly, don't re-parse
+      // through Date() (which would reinterpret a naive/offset time in the viewer's local zone).
+      $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
+      $("p-magtype").textContent = (p.source || "").toUpperCase() || "—";
+      $("p-precision").textContent = (p.geom_precision || "").replace(/_/g, " ");
+      // impact honesty: absence shown AS DATA, never as an implied zero — worded per source.
+      const silence = IMPACT_SILENCE[p.source] || "this source records location and intensity, not impact";
+      $("p-impact").innerHTML = hasImpact
+        ? "<b>Impact:</b> recorded — see source."
+        : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+      // source trail: link straight to the server-provided authoritative record (no client derivation).
+      const link = $("p-srclink");
+      if (p.source_url) {
+        link.href = p.source_url;
+        link.textContent = (SRC_LABEL[p.source] || "Source record") + " →";
+        link.style.display = "";
+      } else {
+        link.style.display = "none";
+      }
+      panel.classList.add("open");
+    }
+  </script>
+</body>
+</html>
