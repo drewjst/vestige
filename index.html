@@ -185,22 +185,8 @@
   .stat .n.warn{color:var(--beacon-2)}
   .stat .k{font-family:var(--font-mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-4); margin-top:.2rem}
 
-  /* timeline */
-  .timeline{padding:1.5rem 1.8rem; border-bottom:1px solid var(--line)}
-  .tl-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1.1rem}
-  .tl-head .yr{font-family:var(--font-display); font-size:1.6rem; color:var(--beacon-2); font-variant-numeric:tabular-nums}
-  .tl-head .hint{font-family:var(--font-mono); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-4)}
-  .rail{position:relative; height:46px; cursor:ew-resize; touch-action:none; user-select:none}
-  .rail .base{position:absolute; top:50%; left:0; right:0; height:2px; background:var(--line-2); transform:translateY(-50%)}
-  .rail .fill{position:absolute; top:50%; left:0; height:2px; background:linear-gradient(90deg,var(--beacon),var(--beacon-2)); transform:translateY(-50%)}
-  .rail .tick{position:absolute; top:50%; width:2px; height:16px; background:var(--ink-3); transform:translate(-50%,-50%)}
-  .rail .tick.ev{height:22px; width:3px; border-radius:2px}
-  .rail .tick .lab{position:absolute; bottom:20px; left:50%; transform:translateX(-50%); font-family:var(--font-mono); font-size:.62rem; color:var(--ink-3); white-space:nowrap}
-  .rail .handle{position:absolute; top:50%; width:16px; height:16px; border-radius:50%; background:var(--beacon); border:2px solid #0b0e14; transform:translate(-50%,-50%); box-shadow:0 0 14px 2px rgba(255,171,61,.55)}
-  .rail .yrmark{position:absolute; bottom:-2px; font-family:var(--font-mono); font-size:.6rem; color:var(--ink-4)}
-
   /* events */
-  .events{display:grid; grid-template-columns:repeat(3,1fr); gap:0}
+  .events{display:grid; grid-template-columns:repeat(3,1fr); gap:0; border-top:1px solid var(--line)}
   .ev-card{padding:1.5rem 1.6rem; border-right:1px solid var(--line); transition:background .3s}
   .ev-card:last-child{border-right:0}
   .ev-card.hot{background:rgba(255,171,61,.05)}
@@ -212,11 +198,15 @@
   .ev-metrics{display:flex; flex-wrap:wrap; gap:.9rem; margin-top:1rem}
   .ev-metrics div{font-family:var(--font-mono)}
   .ev-metrics .mv{font-size:1.02rem; color:var(--ink); font-variant-numeric:tabular-nums}
+  .ev-metrics .mv.warn{color:var(--beacon-2)}
+  .ev-metrics .mv.absent{font-size:.82rem; color:var(--ink-4); font-style:italic}
   .ev-metrics .mk{font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-4)}
+  .src.prec{border-color:var(--line-2); color:var(--ink-4)}
+  .profile-foot a{color:var(--ink-3); text-decoration:none; border-bottom:1px solid var(--line-2)}
+  .profile-foot a:hover{color:var(--beacon-2)}
   .sources{display:flex; gap:.4rem; margin-top:1.1rem; flex-wrap:wrap}
   .src{font-family:var(--font-mono); font-size:.62rem; letter-spacing:.06em; color:var(--ink-3); border:1px solid var(--line); border-radius:5px; padding:.2rem .45rem}
   .profile-foot{padding:1rem 1.8rem; font-family:var(--font-mono); font-size:.72rem; color:var(--ink-4); display:flex; justify-content:space-between; flex-wrap:wrap; gap:.5rem}
-  .profile-foot .beacon-txt{cursor:pointer}
 
   /* HAZARDS grid */
   .haz-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:2.5rem; background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden}
@@ -334,7 +324,7 @@
         </a>
       </div>
       <div class="chips" id="chips">
-        <button class="chip"><span class="dot" style="background:var(--hz-cyclone)"></span>Hurricane history &middot; Houston</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>The 2021 heat dome &middot; Portland</button>
         <button class="chip"><span class="dot" style="background:var(--hz-tornado)"></span>Every tornado within 100 mi of Nashville</button>
         <button class="chip"><span class="dot" style="background:var(--hz-flood)"></span>What flooded Asheville</button>
         <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>Deadliest heat &middot; Phoenix</button>
@@ -368,94 +358,11 @@
 <section class="band dossier" id="dossier">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow rv">A single place, fully remembered</div>
-      <h2 class="lede-h rv">What you'd find under Houston.</h2>
+      <div class="eyebrow rv">A single place, as the record holds it</div>
+      <h2 class="lede-h rv" id="dossierHead">What you'd find under Asheville.</h2>
     </div>
-    <div class="tabs rv" role="tablist" aria-label="Example places">
-      <span class="tab" role="tab" aria-selected="true">Houston, TX</span>
-      <span class="tab" role="tab" aria-selected="false" data-toast="place">Asheville, NC</span>
-      <span class="tab" role="tab" aria-selected="false" data-toast="place">New Orleans, LA</span>
-      <span class="tab" role="tab" aria-selected="false" data-toast="place">Joplin, MO</span>
-    </div>
-
-    <div class="profile rv">
-      <div class="profile-top">
-        <div>
-          <div class="place">Houston &middot; Harris County, Texas</div>
-          <div class="co">29.76&deg; N, 95.37&deg; W &nbsp;&middot;&nbsp; coastal plain &nbsp;&middot;&nbsp; record begins 1950</div>
-        </div>
-        <div class="stats">
-          <div class="stat"><div class="n">438</div><div class="k">Recorded events</div></div>
-          <div class="stat"><div class="n">75</div><div class="k">Years on file</div></div>
-          <div class="stat"><div class="n warn">$180B+</div><div class="k">Est. damage</div></div>
-          <div class="stat"><div class="n warn">Harvey</div><div class="k">Costliest</div></div>
-        </div>
-      </div>
-
-      <div class="timeline">
-        <div class="tl-head">
-          <span class="yr" id="tlYear">2017</span>
-          <span class="hint">&larr; drag to travel through the record &rarr;</span>
-        </div>
-        <div class="rail" id="rail" role="slider" aria-label="Year" aria-valuemin="1950" aria-valuemax="2025" aria-valuenow="2017" tabindex="0">
-          <div class="base"></div>
-          <div class="fill" id="tlFill"></div>
-          <div class="tick" style="left:8%"></div><div class="tick" style="left:20%"></div>
-          <div class="tick" style="left:31%"></div><div class="tick" style="left:44%"></div>
-          <div class="tick" style="left:58%"></div><div class="tick" style="left:70%"></div>
-          <div class="tick ev" data-year="2001" style="left:68%; background:var(--hz-flood); color:var(--hz-flood)"><span class="lab">Allison &rsquo;01</span></div>
-          <div class="tick ev" data-year="2008" style="left:77.3%; background:var(--hz-cyclone); color:var(--hz-cyclone)"><span class="lab">Ike &rsquo;08</span></div>
-          <div class="tick ev" data-year="2017" style="left:89.3%; background:var(--beacon); color:var(--beacon)"><span class="lab">Harvey &rsquo;17</span></div>
-          <div class="handle" id="tlHandle" style="left:89.3%"></div>
-          <span class="yrmark" style="left:0">1950</span>
-          <span class="yrmark" style="right:0">2025</span>
-        </div>
-      </div>
-
-      <div class="events" id="events">
-        <div class="ev-card" data-year="2017">
-          <span class="ev-tag" style="color:var(--beacon-2)"><i></i>Tropical cyclone &middot; flood</span>
-          <div class="when">26 Aug &ndash; 2 Sep 2017</div>
-          <div class="name">Hurricane Harvey</div>
-          <p class="desc">Stalled over the metro for four days and dropped more rain than any storm in U.S. history. A third of Harris County went underwater.</p>
-          <div class="ev-metrics">
-            <div><div class="mv">60.6&Prime;</div><div class="mk">Peak rain</div></div>
-            <div><div class="mv">$125B</div><div class="mk">Damage</div></div>
-            <div><div class="mv">68</div><div class="mk">Deaths &middot; TX</div></div>
-          </div>
-          <div class="sources"><span class="src">NOAA</span><span class="src">FEMA DR-4332</span><span class="src">USGS</span></div>
-        </div>
-        <div class="ev-card" data-year="2008">
-          <span class="ev-tag" style="color:var(--hz-cyclone)"><i></i>Tropical cyclone &middot; surge</span>
-          <div class="when">13 Sep 2008</div>
-          <div class="name">Hurricane Ike</div>
-          <p class="desc">Came ashore at Galveston as a strong Category 2, pushing a surge across the bay and knocking out power to millions for weeks.</p>
-          <div class="ev-metrics">
-            <div><div class="mv">110 mph</div><div class="mk">Winds</div></div>
-            <div><div class="mv">$38B</div><div class="mk">Damage</div></div>
-            <div><div class="mv">15 ft</div><div class="mk">Surge</div></div>
-          </div>
-          <div class="sources"><span class="src">IBTrACS</span><span class="src">NOAA</span><span class="src">FEMA</span></div>
-        </div>
-        <div class="ev-card" data-year="2001">
-          <span class="ev-tag" style="color:var(--hz-flood)"><i></i>Tropical storm &middot; flood</span>
-          <div class="when">5 &ndash; 9 Jun 2001</div>
-          <div class="name">Tropical Storm Allison</div>
-          <p class="desc">Never a hurricane, yet one of the costliest to ever hit the U.S. &mdash; proof that the category number never tells the whole story.</p>
-          <div class="ev-metrics">
-            <div><div class="mv">40&Prime;</div><div class="mk">Peak rain</div></div>
-            <div><div class="mv">$9B</div><div class="mk">Damage</div></div>
-            <div><div class="mv">23</div><div class="mk">Deaths</div></div>
-          </div>
-          <div class="sources"><span class="src">NOAA</span><span class="src">FEMA DR-1379</span></div>
-        </div>
-      </div>
-
-      <div class="profile-foot">
-        <span>Similar nearby: <span class="beacon-txt" data-toast="place">Galveston 1900</span> &middot; <span class="beacon-txt" data-toast="place">Tax Day Flood 2016</span> &middot; <span class="beacon-txt" data-toast="place">Rita 2005</span></span>
-        <span>438 events &middot; figures from public record, illustrative</span>
-      </div>
-    </div>
+    <div class="tabs rv" role="tablist" aria-label="Recorded places" id="dossierTabs"></div>
+    <div class="profile rv" id="dossierProfile" aria-live="polite"></div>
   </div>
 </section>
 
@@ -554,7 +461,6 @@
   var MSG = {
     search:"This is a static concept &mdash; the atlas isn't live <b>yet</b>.",
     early:"Noted. There's no signup <b>yet</b> &mdash; this is a design mock.",
-    place:"In the real atlas, this opens that place's full record.",
     soon:"Concept only &mdash; no page behind this <b>yet</b>.",
     cta:"Thanks &mdash; but this is a mock. Nothing was sent."
   };
@@ -622,33 +528,133 @@
     });
   }
 
-  /* ---------- timeline scrubber ---------- */
-  var rail=document.getElementById("rail"), handle=document.getElementById("tlHandle"),
-      fill=document.getElementById("tlFill"), yEl=document.getElementById("tlYear"),
-      cards=[].slice.call(document.querySelectorAll("#events .ev-card")),
-      Y0=1950, Y1=2025;
-  function setPct(p){
-    p=Math.max(0,Math.min(100,p));
-    handle.style.left=p+"%"; fill.style.width=p+"%";
-    var yr=Math.round(Y0+(Y1-Y0)*p/100);
-    yEl.textContent=yr; rail.setAttribute("aria-valuenow",yr);
-    var best=null,bd=99;
-    cards.forEach(function(c){ var d=Math.abs((+c.dataset.year)-yr); if(d<bd){bd=d;best=c;} });
-    cards.forEach(function(c){ c.classList.toggle("hot", c===best && bd<=3); });
+  /* ---------- place dossier (REAL records; live count refresh) ---------- */
+  // Every figure below is a real recorded value, carved from the committed NCEI / USGS / IBTrACS
+  // fixtures and verified against the API. Nothing is summed across events; absence is shown as
+  // absence, never a zero we invented. The event count is refreshed live from /api/place/{id}
+  // when the atlas API is reachable, and degrades silently to the (equally real) baked count.
+  var HZC = {flood:"var(--hz-flood)", cyclone:"var(--hz-cyclone)", heat:"var(--hz-heat)",
+    winter:"var(--hz-winter)", tornado:"var(--hz-tornado)", earthquake:"var(--hz-quake)",
+    landslide:"var(--hz-drought)"};
+  var DOSSIER = [
+    { id:"county:37021", tab:"Asheville, NC", short:"Asheville", head:"What you’d find under Asheville.",
+      place:"Asheville &middot; Buncombe County, North Carolina",
+      co:"NCEI Storm Events &middot; USGS &middot; IBTrACS &middot; records reach back to 1996",
+      tiles:[{n:"25",k:"recorded events",id:"dossierCount"},{n:"2024",k:"record window"},{n:"15",k:"most deaths, one event",warn:true}],
+      foot:"25 recorded events &middot; every figure a real NCEI / USGS / IBTrACS row &middot; nothing summed across events",
+      cards:[
+        {hot:true,hz:"flood",tag:"Flash Flood",when:"27 Sep 2024",name:"Helene flash flood",
+         desc:"Swift-water flooding during Hurricane Helene, recorded at observed coordinates in Buncombe County.",
+         metrics:[{v:"15",k:"direct deaths",cls:"warn"},{v:"$300M",k:"property (2024)"}],
+         src:[{t:"NCEI EV 1218197"},{t:"observed point",prec:true}]},
+        {hz:"cyclone",tag:"Tropical Storm",when:"27 Sep 2024",name:"Helene, county-attributed",
+         desc:"Helene’s county-level impact — attributed to Buncombe with no observed point and no wind magnitude in this record.",
+         metrics:[{v:"$35M",k:"property (2024)"},{v:"not recorded",k:"magnitude",cls:"absent"}],
+         src:[{t:"NCEI EV 1218126"},{t:"zone → county",prec:true}]},
+        {hz:"landslide",tag:"Debris Flow",when:"27 Sep 2024",name:"Helene debris flow",
+         desc:"A landslide debris flow during Helene, at observed coordinates.",
+         metrics:[{v:"13",k:"direct deaths",cls:"warn"},{v:"$1M",k:"property (2024)"}],
+         src:[{t:"NCEI EV 1218216"},{t:"observed point",prec:true}]}
+      ]},
+    { id:"county:41051", tab:"Portland, OR", short:"Portland", head:"What you’d find under Portland.",
+      place:"Portland &middot; Multnomah County, Oregon",
+      co:"NCEI Storm Events &middot; USGS &middot; the 2021 record",
+      tiles:[{n:"16",k:"recorded events",id:"dossierCount"},{n:"2021",k:"record window"},{n:"93",k:"most deaths, one event",warn:true}],
+      foot:"16 recorded events &middot; the 93-death toll is the NWS Greater Portland Metro Area zone figure, attributed to Multnomah &middot; every figure a real NCEI / USGS row",
+      cards:[
+        {hot:true,hz:"heat",tag:"Excessive Heat",when:"26 Jun 2021",name:"The 2021 heat dome",
+         desc:"Recorded by NWS for the Greater Portland Metro Area forecast zone and attributed to Multnomah County — the deadliest single event in any Vestige record.",
+         metrics:[{v:"93",k:"direct deaths",cls:"warn"},{v:"$50K",k:"property (2021)"}],
+         src:[{t:"NCEI EV 961302"},{t:"zone → county",prec:true}]},
+        {hz:"winter",tag:"Ice Storm",when:"14 Feb 2021",name:"Mid-February ice storm",
+         desc:"An ice storm across the metro — property loss, no deaths recorded.",
+         metrics:[{v:"$5M",k:"property (2021)"},{v:"0",k:"deaths recorded"}],
+         src:[{t:"NCEI EV 946433"},{t:"zone → county",prec:true}]},
+        {hz:"landslide",tag:"Debris Flow",when:"13 Jan 2021",name:"January landslide",
+         desc:"A debris flow at observed coordinates in Multnomah County.",
+         metrics:[{v:"1",k:"direct death",cls:"warn"},{v:"$35K",k:"property (2021)"}],
+         src:[{t:"NCEI EV 938288"},{t:"observed point",prec:true}]}
+      ]},
+    { id:"county:53033", tab:"Seattle, WA", short:"Seattle", head:"What you’d find under Seattle.",
+      place:"Seattle &middot; King County, Washington",
+      co:"NCEI Storm Events &middot; USGS &middot; the 2021 record",
+      tiles:[{n:"10",k:"recorded events",id:"dossierCount"},{n:"2021",k:"record window"},{n:"0",k:"most deaths, one event",warn:true}],
+      foot:"10 recorded events &middot; the record’s silence is data, not a zero we invented",
+      cards:[
+        {hot:true,hz:"heat",tag:"Heat",when:"26 Jun 2021",name:"The same heat dome",
+         desc:"The June 2021 dome that killed 93 in the Portland zone was logged here as a heat advisory — zero deaths recorded, though the county’s real toll was higher. The gap between a source and the truth is the whole point.",
+         metrics:[{v:"0",k:"deaths recorded"},{v:"“Heat”",k:"NCEI event type"}],
+         src:[{t:"NCEI EV 969639"},{t:"zone → county",prec:true}]},
+        {hz:"flood",tag:"Flood",when:"12 Jan 2021",name:"January flooding",
+         desc:"The county’s one substantial recorded loss that year, at observed coordinates.",
+         metrics:[{v:"$474K",k:"property (2021)"},{v:"0",k:"deaths recorded"}],
+         src:[{t:"NCEI EV 994294"},{t:"observed point",prec:true}]},
+        {hz:"earthquake",tag:"Earthquake",when:"28 Feb 2001",name:"Nisqually M6.8",
+         desc:"Seattle’s defining hazard sits in another feed: the 2001 Nisqually quake, on the map. USGS records where and how strong — never ground impact.",
+         metrics:[{v:"M6.8",k:"USGS"},{v:"not recorded",k:"impact, this feed",cls:"absent"}],
+         src:[{t:"USGS uw10530748"},{t:"observed point",prec:true}]}
+      ]},
+    { id:"county:12071", tab:"Fort Myers, FL", short:"Lee County", head:"What you’d find under Fort Myers.",
+      place:"Fort Myers &middot; Lee County, Florida",
+      co:"NCEI Storm Events &middot; IBTrACS &middot; the 2022 record",
+      tiles:[{n:"23",k:"recorded events",id:"dossierCount"},{n:"2022",k:"record window"},{n:"60",k:"most deaths, one event",warn:true}],
+      foot:"23 recorded events &middot; every figure a real NCEI / IBTrACS row &middot; nothing summed across events",
+      cards:[
+        {hot:true,hz:"cyclone",tag:"Hurricane &middot; Ian",when:"28 Sep 2022",name:"Ian makes landfall",
+         desc:"Ian’s surge and wind recorded for the Coastal Lee forecast zone — the county’s catastrophic day.",
+         metrics:[{v:"60",k:"direct deaths",cls:"warn"},{v:"$7B",k:"property (2022)"}],
+         src:[{t:"NCEI EV 1058654"},{t:"zone → county",prec:true}]},
+        {hz:"cyclone",tag:"Hurricane &middot; Ian",when:"28 Sep 2022",name:"The same storm, inland",
+         desc:"The identical hurricane, the county’s inland zone — zero deaths recorded there. Same storm, different zone, different record.",
+         metrics:[{v:"0",k:"deaths recorded"},{v:"$0",k:"property"}],
+         src:[{t:"NCEI EV 1058659"},{t:"zone → county",prec:true}]},
+        {hz:"tornado",tag:"Tornado",when:"16 Jan 2022",name:"The ordinary year before",
+         desc:"Eight months before Ian: a January tornado at observed coordinates.",
+         metrics:[{v:"$10M",k:"property (2022)"},{v:"0",k:"deaths recorded"}],
+         src:[{t:"NCEI EV 995997"},{t:"observed point",prec:true}]}
+      ]}
+  ];
+  function dMetric(m){ return '<div><div class="mv '+(m.cls||"")+'">'+m.v+'</div><div class="mk">'+m.k+'</div></div>'; }
+  function dCard(c){
+    return '<div class="ev-card'+(c.hot?" hot":"")+'">'+
+      '<span class="ev-tag" style="color:'+(HZC[c.hz]||"var(--ink-2)")+'"><i></i>'+c.tag+'</span>'+
+      '<div class="when">'+c.when+'</div><div class="name">'+c.name+'</div>'+
+      '<p class="desc">'+c.desc+'</p>'+
+      '<div class="ev-metrics">'+c.metrics.map(dMetric).join("")+'</div>'+
+      '<div class="sources">'+c.src.map(function(s){ return '<span class="src'+(s.prec?" prec":"")+'">'+s.t+'</span>'; }).join("")+'</div></div>';
   }
-  function fromEvent(e){
-    var r=rail.getBoundingClientRect(), x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    setPct(x/r.width*100);
+  var dossierReq = 0;  // guards the async count refresh so a stale response can't cross-write a tab
+  function renderPlace(d){
+    var seq = ++dossierReq;
+    document.getElementById("dossierHead").textContent = d.head;
+    var tiles = d.tiles.map(function(t){
+      return '<div class="stat"><div class="n'+(t.warn?" warn":"")+'"'+(t.id?' id="'+t.id+'"':'')+'>'+t.n+'</div><div class="k">'+t.k+'</div></div>';
+    }).join("");
+    document.getElementById("dossierProfile").innerHTML =
+      '<div class="profile-top"><div><div class="place">'+d.place+'</div>'+
+        '<div class="co">'+d.co+'</div></div><div class="stats">'+tiles+'</div></div>'+
+      '<div class="events">'+d.cards.map(dCard).join("")+'</div>'+
+      '<div class="profile-foot"><span>'+d.foot+'</span>'+
+        '<span><a href="app.html">Open '+d.short+' on the map &rarr;</a></span></div>';
+    // Live count refresh — a real row count from the atlas, replacing the (also real) baked one.
+    fetch(API_BASE + "/api/place/" + d.id).then(function(r){ return r.json(); }).then(function(p){
+      if(seq !== dossierReq) return;  // a newer tab click superseded this fetch — don't cross-write
+      var el = document.getElementById("dossierCount");
+      if(el && p && typeof p.event_count === "number") el.textContent = p.event_count;
+    }).catch(function(){ /* baked real count stands if the API is unreachable */ });
   }
-  var dragging=false;
-  rail.addEventListener("pointerdown", function(e){ dragging=true; rail.setPointerCapture(e.pointerId); fromEvent(e); });
-  rail.addEventListener("pointermove", function(e){ if(dragging) fromEvent(e); });
-  rail.addEventListener("pointerup", function(){ dragging=false; });
-  rail.addEventListener("keydown", function(e){
-    var yr=+rail.getAttribute("aria-valuenow"), step=(e.key==="ArrowLeft")?-1:(e.key==="ArrowRight")?1:0;
-    if(step){ e.preventDefault(); yr=Math.max(Y0,Math.min(Y1,yr+step)); setPct((yr-Y0)/(Y1-Y0)*100); }
+  var dTabs = document.getElementById("dossierTabs");
+  DOSSIER.forEach(function(d, i){
+    var t = document.createElement("span");
+    t.className = "tab"; t.setAttribute("role", "tab"); t.textContent = d.tab;
+    t.setAttribute("aria-selected", i === 0 ? "true" : "false");
+    t.addEventListener("click", function(){
+      [].slice.call(dTabs.children).forEach(function(x){ x.setAttribute("aria-selected", "false"); });
+      t.setAttribute("aria-selected", "true"); renderPlace(d);
+    });
+    dTabs.appendChild(t);
   });
-  setPct(89.3);
+  renderPlace(DOSSIER[0]);
 
   /* ---------- scroll reveal ---------- */
   var rvs=[].slice.call(document.querySelectorAll(".rv"));
