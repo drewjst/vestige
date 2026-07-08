@@ -400,6 +400,21 @@
       applyFilters();
     }
 
+    function updateTimeRange(fromInput, toInput) {
+      let from = Number(fromInput.value);
+      let to = Number(toInput.value);
+      if (from > to) {
+        [from, to] = [to, from];
+        fromInput.value = String(from);
+        toInput.value = String(to);
+      }
+      timeFrom = from === minYear ? null : `${from}-01-01T00:00:00`;
+      timeTo = to === maxYear ? null : `${to}-12-31T23:59:59`;
+      $("from-val").textContent = String(from);
+      $("to-val").textContent = String(to);
+      applyFilters();
+    }
+
     // Fetch full event detail (carries itemized impact) before opening the dossier — the
     // collection is kept lean, so impact lives on the per-event endpoint.
     async function openEvent(eventId) {
