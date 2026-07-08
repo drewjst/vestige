@@ -341,6 +341,65 @@
       });
     }
 
+    // A geom_precision filter a layer already has, combined with the user's active hazard/time
+    // selections. A track must still never render as a pin, filter or no filter — the precision
+    // clause always stays in the combined expression, it's never replaced by the new one.
+    function baseFilterFor(precision) {
+      return ["==", ["get", "geom_precision"], precision];
+    }
+
+    function withUserFilters(base) {
+      const clauses = [base];
+      if (selectedHazards.size > 0) {
+        clauses.push(["in", ["get", "hazard_class"], ["literal", [...selectedHazards]]]);
+      }
+      if (timeFrom) clauses.push([">=", ["get", "time"], timeFrom]);
+      if (timeTo) clauses.push(["<=", ["get", "time"], timeTo]);
+      return clauses.length > 1 ? ["all", ...clauses] : base;
+    }
+
+    function applyFilters() {
+      map.setFilter("tracks", withUserFilters(baseFilterFor("track_line")));
+      map.setFilter("quakes-glow", withUserFilters(baseFilterFor("observed_point")));
+      map.setFilter("quakes", withUserFilters(baseFilterFor("observed_point")));
+      updateCount();
+      updateBadge();
+    }
+
+    // Mirrors withUserFilters in plain JS (not a MapLibre expression) so the "N of TOTAL" count
+    // can include county-precision events too — those never render as pins/tracks (counties
+    // aren't hazard/time-filtered this round, see design spec), but they still count toward totals.
+    function eventMatchesFilters(props) {
+      if (selectedHazards.size > 0 && !selectedHazards.has(props.hazard_class)) return false;
+      if (timeFrom && props.time < timeFrom) return false;
+      if (timeTo && props.time > timeTo) return false;
+      return true;
+    }
+
+    function updateCount() {
+      const shown = allEvents.filter((f) => eventMatchesFilters(f.properties)).length;
+      $("filter-shown").textContent = String(shown);
+      $("filter-total").textContent = String(allEvents.length);
+      $("filter-empty").style.display = shown === 0 ? "block" : "none";
+    }
+
+    function updateBadge() {
+      const active = selectedHazards.size + (timeFrom || timeTo ? 1 : 0);
+      $("filter-pill").textContent = active > 0 ? `Filter · ${active}` : "Filter";
+      $("filter-pill").classList.toggle("active", active > 0);
+    }
+
+    function toggleHazard(cls, el) {
+      if (selectedHazards.has(cls)) {
+        selectedHazards.delete(cls);
+        el.classList.remove("on");
+      } else {
+        selectedHazards.add(cls);
+        el.classList.add("on");
+      }
+      applyFilters();
+    }
+
     // Fetch full event detail (carries itemized impact) before opening the dossier — the
     // collection is kept lean, so impact lives on the per-event endpoint.
     async function openEvent(eventId) {
