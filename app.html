@@ -302,6 +302,12 @@
     // rebuild the same sources/layers against the new basemap. Paint always comes from
     // MAP_THEME[currentTheme] — never a literal — so dark/light never drift out of sync.
     function addDataLayers() {
+      // Idempotency guard: a failed theme swap deliberately leaves its "style.load" listener
+      // attached (see setTheme below — a late-loading style still needs its data layers), so the
+      // recovery toggle's own "style.load" listener can end up queued behind it. Both then fire on
+      // the SAME style load: the stale one runs this function first and succeeds, so the second
+      // call must be a harmless no-op rather than an addSource() throw on a source that's already there.
+      if (map.getSource("events")) return;
       const theme = MAP_THEME[currentTheme];
       // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
       // render at the precision it actually has — a track never becomes a pin, a point never a line.
@@ -374,8 +380,13 @@
       // Recovery path: if the basemap style never loads (CDN outage, ad-blocker, offline), "style.load"
       // never fires and themeSwitchPending would stay true forever — permanently dead-ending the toggle.
       // An "error" listener and a timeout fallback both clear the pending flag so the user can always
-      // toggle again (e.g. back to the previously-working theme). Whichever path fires first tears down
-      // the other two, so a later, unrelated map error can't incorrectly clear a future pending swap.
+      // toggle again (e.g. back to the previously-working theme). On success, the "style.load" handler
+      // tears down the error listener and the timer. On failure (error or timeout), only the pending
+      // flag and the OTHER failure guard are torn down — the "style.load" listener above is deliberately
+      // left attached, because the style may still load late and, if it does, must still get its data
+      // layers. That means a failed swap followed by a recovery toggle can leave TWO "style.load"
+      // listeners queued on the same eventual load; both firing is expected, and addDataLayers()'s
+      // idempotency guard (above) is what makes the second firing harmless instead of an addSource() throw.
       const failTimer = setTimeout(() => {
         map.off("error", onStyleError);
         themeSwitchPending = false;
