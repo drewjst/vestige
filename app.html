@@ -4,6 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vestige — western North Carolina · earthquakes + Helene's track</title>
+  <script>
+    // Resolve + apply the theme BEFORE the stylesheet below paints, so there's no flash of the
+    // wrong theme. localStorage wins over OS preference; dark is the no-preference default.
+    // Deliberately does not touch maplibregl — this must run long before that script loads.
+    (function () {
+      var t;
+      try { t = localStorage.getItem("vestige-theme"); } catch (e) { t = null; }
+      if (t !== "light" && t !== "dark") {
+        t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+          ? "light" : "dark";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
     :root{
@@ -129,6 +143,16 @@
       border-radius:999px;padding:.45rem .85rem;cursor:pointer;backdrop-filter:blur(8px);
     }
     .filter-pill.active{border-color:var(--beacon);color:var(--beacon);background:var(--beacon-tint-active)}
+    .theme-pill{
+      position:absolute;top:.7rem;right:1rem;z-index:5;
+      font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
+      background:var(--glass);border:1px solid var(--line);color:var(--ink-2);
+      border-radius:999px;padding:.45rem .85rem;cursor:pointer;backdrop-filter:blur(8px);
+    }
+    .theme-pill:hover{border-color:var(--line-2)}
+    .theme-pill .tp-light{display:none}
+    html[data-theme="light"] .theme-pill .tp-dark{display:none}
+    html[data-theme="light"] .theme-pill .tp-light{display:inline}
     .filter-panel{
       position:absolute;top:5rem;right:1rem;z-index:5;width:15.5rem;
       background:var(--glass-3);border:1px solid var(--line);border-radius:10px;
@@ -169,6 +193,9 @@
     click any event
   </div>
 
+  <button id="theme-pill" class="theme-pill" type="button" aria-label="Toggle light/dark theme">
+    <span class="tp-dark">☾ dark</span><span class="tp-light">☀ light</span>
+  </button>
   <button id="filter-pill" class="filter-pill" type="button">Filter</button>
   <div id="filter-panel" class="filter-panel">
     <div class="fsec">
@@ -254,10 +281,13 @@
     };
     const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
-    // Resolved once at load; theme SELECTION (persistence, toggle UI, FOUC-safe head script)
-    // lands in a follow-up commit — for now this only decides which basemap/paint set to use.
+    // The <head> script already resolved + applied localStorage/OS preference before first paint;
+    // read it back here so the map's initial style and the CSS chrome agree from frame one.
     let currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
     let fc = EMPTY_FC, places = EMPTY_FC;
+    // Blocks the toggle both before the very first load completes (sources/layers don't exist yet)
+    // and while a setStyle()'s style.load is still pending (guards rapid double-toggles).
+    let themeSwitchPending = true;
 
     const map = new maplibregl.Map({
       container: "map",
@@ -325,6 +355,29 @@
       });
     }
 
+    // Toggle = swap the basemap style, then rebuild sources/layers + re-run applyFilters() once
+    // the new style has loaded — setStyle() wipes filter state along with everything else, so an
+    // active filter would silently reset without this. Layer click/mouseenter handlers below are
+    // registered ONCE, on the map itself (not per-style) — they're delegated listeners that keep
+    // working once the layer ids reappear, so they must never be re-registered here.
+    function setTheme(t) {
+      if (themeSwitchPending || t === currentTheme) return;
+      currentTheme = t;
+      try { localStorage.setItem("vestige-theme", t); } catch (e) { /* private mode etc — non-fatal */ }
+      document.documentElement.dataset.theme = t;
+      themeSwitchPending = true;
+      // {diff:false} forces a full style reload — with diffing (the default), MapLibre treats a
+      // same-shape style swap as an incremental update and "style.load" never fires again after
+      // the map's first-ever load (only "styledata"/"idle" do), so addDataLayers() would never
+      // be re-invoked and the map would be stuck on the old basemap's now-sourceless layers.
+      map.setStyle(MAP_THEME[t].style, { diff: false });
+      map.once("style.load", () => {
+        addDataLayers();
+        applyFilters();
+        themeSwitchPending = false;
+      });
+    }
+
     map.on("load", async () => {
       const [fcData, placesRaw] = await Promise.all([
         fetch(API_BASE + "/api/events").then(r => r.json()),
@@ -344,6 +397,7 @@
       map.on("click", "quakes", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "counties-fill", (e) => openPlace(e.features[0].properties.place_id));
       initFilterUI(fc.features);
+      themeSwitchPending = false;
     });
 
     let allEvents = [];
@@ -515,6 +569,7 @@
     const countyPanel = $("county-panel");
     $("close").onclick = () => panel.classList.remove("open");
     $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); };
+    $("theme-pill").onclick = () => setTheme(currentTheme === "light" ? "dark" : "light");
 
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
