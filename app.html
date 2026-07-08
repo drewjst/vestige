@@ -101,6 +101,38 @@
     .src a:hover{border-color:var(--beacon)}
     .src .lbl{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
       color:var(--ink-4);display:block;margin-bottom:.5rem}
+    .filter-pill{
+      position:absolute;top:2.6rem;right:1rem;z-index:5;
+      font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
+      background:rgba(14,18,25,.85);border:1px solid var(--line);color:var(--ink-2);
+      border-radius:999px;padding:.45rem .85rem;cursor:pointer;backdrop-filter:blur(8px);
+    }
+    .filter-pill.active{border-color:var(--beacon);color:var(--beacon);background:rgba(255,171,61,.1)}
+    .filter-panel{
+      position:absolute;top:5rem;right:1rem;z-index:5;width:15.5rem;
+      background:rgba(11,14,20,.92);border:1px solid var(--line);border-radius:10px;
+      backdrop-filter:blur(8px);display:none;overflow:hidden;
+    }
+    .filter-panel.open{display:block}
+    .fsec{padding:.7rem .85rem}
+    .fsec + .fsec{border-top:1px solid var(--line)}
+    .flabel{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--ink-3);margin-bottom:.5rem}
+    .fchip{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:.66rem;
+      border:1px solid var(--line-2);border-radius:999px;padding:.25rem .6rem;color:var(--ink-2);
+      cursor:pointer;margin:0 .3rem .3rem 0;background:transparent}
+    .fchip.on{border-color:var(--beacon);color:var(--beacon);background:rgba(255,171,61,.12)}
+    .frange{display:flex;flex-direction:column;gap:.5rem}
+    .frange label{display:flex;justify-content:space-between;font-family:var(--font-mono);
+      font-size:.62rem;color:var(--ink-3)}
+    .frange input[type=range]{width:100%;accent-color:var(--beacon)}
+    .fcount{padding:.6rem .85rem;font-family:var(--font-mono);font-size:.64rem;color:var(--ink-4);
+      border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+    .fcount b{color:var(--ink-2);font-weight:500}
+    .fcount .reset{background:none;border:0;color:var(--track);font-family:var(--font-mono);
+      font-size:.62rem;cursor:pointer;padding:0}
+    .fempty{margin:0;padding:.6rem .85rem;font-family:var(--font-mono);font-size:.62rem;
+      color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);display:none}
   </style>
 </head>
 <body>
@@ -114,6 +146,28 @@
     <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
     <span class="cty"></span><b class="cy">County impact</b> (NOAA Storm Events)<br>
     click any event
+  </div>
+
+  <button id="filter-pill" class="filter-pill" type="button">Filter</button>
+  <div id="filter-panel" class="filter-panel">
+    <div class="fsec">
+      <div class="flabel">Hazard type</div>
+      <div id="filter-chips"></div>
+    </div>
+    <div class="fsec">
+      <div class="flabel">Time range</div>
+      <div class="frange">
+        <label>From <span id="from-val"></span></label>
+        <input type="range" id="time-from" />
+        <label>To <span id="to-val"></span></label>
+        <input type="range" id="time-to" />
+      </div>
+    </div>
+    <div class="fcount">
+      <span><b id="filter-shown"></b> of <span id="filter-total"></span> events shown</span>
+      <button id="filter-reset" class="reset" type="button">reset</button>
+    </div>
+    <p id="filter-empty" class="fempty">No recorded events match this filter — that may be a gap in what's been catalogued, not evidence nothing happened here.</p>
   </div>
 
   <aside id="panel">
@@ -232,7 +286,60 @@
       map.on("click", "tracks", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "quakes", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "counties-fill", (e) => openPlace(e.features[0].properties.place_id));
+      initFilterUI(fc.features);
     });
+
+    let allEvents = [];
+    let selectedHazards = new Set();
+    let timeFrom = null, timeTo = null;
+    let minYear, maxYear;
+
+    // Builds the filter pill + panel from the events actually loaded — hazard chips and the
+    // time-range bounds are both DERIVED from real data, never a hardcoded list, so the filter
+    // never offers a choice the atlas doesn't actually contain. Wires every control now; the
+    // functions some of these call (toggleHazard, updateTimeRange, resetFilters) are added in
+    // later tasks — deferred via the arrow-function wrappers below, so this is safe to load
+    // before they exist, as long as nothing is actually clicked/dragged until its task lands.
+    function initFilterUI(features) {
+      allEvents = features;
+
+      const years = features
+        .map((f) => new Date(f.properties.time).getUTCFullYear())
+        .filter((y) => !Number.isNaN(y));
+      minYear = Math.min(...years);
+      maxYear = Math.max(...years);
+
+      const classes = [...new Set(features.map((f) => f.properties.hazard_class))].sort();
+      $("filter-chips").innerHTML = classes
+        .map((c) => `<span class="fchip" data-class="${c}">${c.replace(/_/g, " ")}</span>`)
+        .join("");
+      $("filter-chips").querySelectorAll(".fchip").forEach((el) => {
+        el.onclick = () => toggleHazard(el.dataset.class, el);
+      });
+
+      const fromInput = $("time-from");
+      const toInput = $("time-to");
+      fromInput.min = toInput.min = String(minYear);
+      fromInput.max = toInput.max = String(maxYear);
+      fromInput.value = String(minYear);
+      toInput.value = String(maxYear);
+      $("from-val").textContent = String(minYear);
+      $("to-val").textContent = String(maxYear);
+      fromInput.oninput = () => updateTimeRange(fromInput, toInput);
+      toInput.oninput = () => updateTimeRange(fromInput, toInput);
+
+      $("filter-pill").onclick = () => $("filter-panel").classList.toggle("open");
+      $("filter-reset").onclick = () => resetFilters();
+
+      $("filter-shown").textContent = String(allEvents.length);
+      $("filter-total").textContent = String(allEvents.length);
+
+      window.filterDebug = () => ({
+        allEventsCount: allEvents.length,
+        selectedHazards: [...selectedHazards],
+        timeFrom, timeTo, minYear, maxYear,
+      });
+    }
 
     // Fetch full event detail (carries itemized impact) before opening the dossier — the
     // collection is kept lean, so impact lives on the per-event endpoint.
