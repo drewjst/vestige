@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vestige — data sources</title>
+  <meta name="description" content="The public feeds behind Vestige — USGS earthquakes, IBTrACS cyclone tracks, and NOAA Storm Events — and what each one actually records." />
+</head>
+<body>
+<style>
+  :root{
+    --bg:#080a0f; --panel:#0e1219; --panel-2:#131824;
+    --line:rgba(150,172,190,.12); --line-2:rgba(150,172,190,.22);
+    --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#556170;
+    --beacon:#ffab3d; --beacon-2:#ffc873; --beacon-ink:#1c1305;
+    --font-display:"Didot","Bodoni 72","Hoefler Text",Georgia,"Times New Roman",serif;
+    --font-body:"Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
+    --wrap:820px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--beacon-2);text-decoration:none;border-bottom:1px solid var(--line-2)}
+  a:hover{color:var(--beacon)}
+  h1,h2{margin:0;font-family:var(--font-display);font-weight:400;letter-spacing:-.01em}
+  p{margin:0}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding-inline:clamp(1.25rem,5vw,3.5rem)}
+  .nav{display:flex;align-items:center;gap:1rem;padding:.85rem clamp(1.25rem,5vw,3.5rem);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:.6rem;color:inherit;text-decoration:none;border:0}
+  .brand .dia{width:11px;height:11px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);box-shadow:0 0 14px 1px rgba(255,171,61,.55)}
+  .brand .wm{font-weight:600;letter-spacing:.34em;font-size:.82rem;text-transform:uppercase}
+  .nav .back{margin-left:auto;font-family:var(--font-mono);font-size:.74rem;color:var(--ink-3);border:0}
+  .hero{padding:3.5rem 0 2rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
+  .hero h1{font-size:clamp(2.2rem,5vw,3.4rem);line-height:1.05;margin-top:.9rem;max-width:18ch}
+  .hero .lead{color:var(--ink-2);margin-top:1.1rem;max-width:52ch}
+  .live{margin-top:1.2rem;font-family:var(--font-mono);font-size:.74rem;color:var(--ink-3);min-height:1.2em}
+  .live b{color:var(--ink);font-weight:600}
+  .feed{margin-top:2.5rem;padding-top:2.5rem;border-top:1px solid var(--line)}
+  .feed h2{font-size:clamp(1.5rem,3vw,2rem);margin-bottom:.35rem}
+  .feed .meta{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);margin-bottom:1rem}
+  .feed p{color:var(--ink-2);max-width:62ch}
+  .feed p+p{margin-top:.85rem;font-size:.95rem;color:var(--ink-3)}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.75rem;margin-top:1.2rem}
+  .col{border:1px solid var(--line);border-radius:10px;padding:.85rem 1rem;background:var(--panel)}
+  .col .k{font-family:var(--font-mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-4)}
+  .col .v{margin-top:.35rem;font-size:.92rem;color:var(--ink)}
+  .honesty{margin:3rem 0;padding:1.4rem 1.5rem;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--panel),var(--panel-2))}
+  .honesty h2{font-size:1.35rem;margin-bottom:.6rem}
+  .honesty ul{margin:.8rem 0 0;padding-left:1.2rem;color:var(--ink-2)}
+  .honesty li+li{margin-top:.45rem}
+  .refs{margin:2.5rem 0 4rem;padding-top:2rem;border-top:1px solid var(--line)}
+  .refs h2{font-size:1.2rem;margin-bottom:.8rem}
+  .refs p{font-family:var(--font-mono);font-size:.78rem;color:var(--ink-3);line-height:1.7}
+  footer{border-top:1px solid var(--line);padding:2rem 0;font-family:var(--font-mono);font-size:.72rem;color:var(--ink-4)}
+  footer a{border:0;color:var(--ink-3)}
+</style>
+
+<nav class="nav">
+  <a class="brand" href="index.html"><span class="dia" aria-hidden="true"></span><span class="wm">Vestige</span></a>
+  <a class="back" href="index.html">&larr; Home</a>
+</nav>
+
+<main class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Public record &middot; provenance</div>
+    <h1>What the map is built from.</h1>
+    <p class="lead">Vestige is a read-only atlas over three authoritative feeds. Every event links back to its source row — nothing is modeled, summed, or invented here.</p>
+    <p class="live" id="live" aria-live="polite"></p>
+  </header>
+
+  <article class="feed" id="usgs">
+    <h2>USGS Earthquake Hazards</h2>
+    <div class="meta">Global &middot; recorded since 1900 &middot; live catalog</div>
+    <p>ComCat / FDSNWS GeoJSON — precise epicenter points with magnitude and depth. The atlas renders each quake as a sized point.</p>
+    <p>USGS records <em>where</em> and <em>how strong</em>, never ground impact. Vestige shows &ldquo;impact not recorded by this source&rdquo; — not a zero.</p>
+    <div class="cols">
+      <div class="col"><div class="k">Geometry</div><div class="v">Observed point</div></div>
+      <div class="col"><div class="k">Impact in feed</div><div class="v">None</div></div>
+      <div class="col"><div class="k">Provenance</div><div class="v">USGS event page per row</div></div>
+    </div>
+  </article>
+
+  <article class="feed" id="ibtracs">
+    <h2>IBTrACS / NHC</h2>
+    <div class="meta">Global best track &middot; recorded since 1842</div>
+    <p>International Best Track Archive for Climate Stewardship — position and intensity every few hours, drawn as cyclone tracks on the map.</p>
+    <p>Track data is physical observation of the storm center, not landfall impact. Deaths and damage for U.S. landfalls, when they exist, come from Storm Events — not IBTrACS.</p>
+    <div class="cols">
+      <div class="col"><div class="k">Geometry</div><div class="v">Track line</div></div>
+      <div class="col"><div class="k">Impact in feed</div><div class="v">None</div></div>
+      <div class="col"><div class="k">Provenance</div><div class="v">NHC TCR + IBTrACS SID</div></div>
+    </div>
+  </article>
+
+  <article class="feed" id="storm-events">
+    <h2>NOAA NCEI Storm Events</h2>
+    <div class="meta">United States &middot; recorded since 1996</div>
+    <p>The only feed that carries recorded deaths, injuries, and property damage — tornadoes, floods, heat, winter storms, wildfires, wind, and more.</p>
+    <p>Collection is heterogeneous: some rows arrive with observed coordinates (county-collected tornadoes, flash floods); others are logged at the NWS forecast-zone level and attributed to a county honestly — a zone name is never drawn as a pinpoint.</p>
+    <div class="cols">
+      <div class="col"><div class="k">Geometry</div><div class="v">Point or county-attributed</div></div>
+      <div class="col"><div class="k">Impact in feed</div><div class="v">Itemized per event</div></div>
+      <div class="col"><div class="k">Provenance</div><div class="v">NCEI Event ID per row</div></div>
+    </div>
+  </article>
+
+  <section class="honesty">
+    <h2>Reference layers (not event feeds)</h2>
+    <p style="color:var(--ink-2);max-width:62ch">County polygons come from U.S. Census TIGER/Line. NWS forecast-zone &rarr; county attribution uses NOAA&rsquo;s public zone&ndash;county correlation — administrative attachment, not measured fire or flood extent.</p>
+    <ul>
+      <li><strong>No place-level totals</strong> — impacts stay itemized; Vestige never sums deaths or damage across events.</li>
+      <li><strong>Precision is visible</strong> — measured points, track lines, and county attribution render differently on the map.</li>
+      <li><strong>Absence is data</strong> — a zero in Storm Events is shown as recorded; silence from USGS/IBTrACS is labeled, not filled in.</li>
+    </ul>
+    <p style="margin-top:1rem;font-size:.9rem"><a href="https://drewjst.github.io/vestige/honesty-model/">Full honesty model &rarr;</a></p>
+  </section>
+
+  <section class="refs">
+    <h2>Authoritative links</h2>
+    <p>
+      <a href="https://earthquake.usgs.gov/">USGS Earthquake Hazards Program</a><br>
+      <a href="https://www.ncei.noaa.gov/products/international-best-track-archive">IBTrACS (NCEI)</a><br>
+      <a href="https://www.ncei.noaa.gov/products/storm-events-database">NCEI Storm Events Database</a><br>
+      <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html">Census TIGER/Line</a><br>
+      <a href="https://www.weather.gov/gis/ZoneCounty">NWS zone&ndash;county correlation</a>
+    </p>
+    <p style="margin-top:1rem;color:var(--ink-4)">FEMA OpenFEMA declarations are planned as a fourth feed test — not loaded in the atlas today.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="app.html">Open the map &rarr;</a> &middot; <a href="index.html">Home</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://localhost:8000"
+    : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
+  fetch(API_BASE + "/api/coverage").then(function(r){ return r.json(); }).then(function(c){
+    var el = document.getElementById("live");
+    if(!el || !c.totals) return;
+    var floors = (c.feeds || []).map(function(f){ return +(f.temporal_floor || "9999").slice(0,4); });
+    var since = floors.length ? Math.min.apply(null, floors) : null;
+    el.innerHTML = "Atlas now &middot; <b>" + c.totals.events + "</b> recorded events across <b>" +
+      (c.feeds ? c.feeds.length : 0) + "</b> feeds" +
+      (since ? " &middot; floors back to <b>" + since + "</b>" : "") +
+      " &middot; every count is a real row, never an estimate.";
+  }).catch(function(){ /* static copy stands */ });
+})();
+</script>
+</body>
+</html>
