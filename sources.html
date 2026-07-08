@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vestige — data sources</title>
   <meta name="description" content="The public feeds behind Vestige — USGS earthquakes, IBTrACS cyclone tracks, and NOAA Storm Events — and what each one actually records." />
+  <script>
+    // Same key + logic as app.html and index.html — one preference sitewide.
+    (function () {
+      var t;
+      try { t = localStorage.getItem("vestige-theme"); } catch (e) { t = null; }
+      if (t !== "light" && t !== "dark") {
+        t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+          ? "light" : "dark";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
 <style>
@@ -13,10 +25,18 @@
     --line:rgba(150,172,190,.12); --line-2:rgba(150,172,190,.22);
     --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#556170;
     --beacon:#ffab3d; --beacon-2:#ffc873; --beacon-ink:#1c1305;
+    --glow:0 0 14px 1px rgba(255,171,61,.55);
     --font-display:"Didot","Bodoni 72","Hoefler Text",Georgia,"Times New Roman",serif;
     --font-body:"Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
     --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
     --wrap:820px;
+  }
+  html[data-theme="light"]{
+    --bg:#f3efe6; --panel:#faf7f0; --panel-2:#efeadf;
+    --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
+    --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
+    --beacon:#8a5407; --beacon-2:#6f4305; --beacon-ink:#faf7f0;
+    --glow:0 1px 6px rgba(74,60,34,.3);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
@@ -27,9 +47,15 @@
   .wrap{max-width:var(--wrap);margin:0 auto;padding-inline:clamp(1.25rem,5vw,3.5rem)}
   .nav{display:flex;align-items:center;gap:1rem;padding:.85rem clamp(1.25rem,5vw,3.5rem);border-bottom:1px solid var(--line)}
   .brand{display:flex;align-items:center;gap:.6rem;color:inherit;text-decoration:none;border:0}
-  .brand .dia{width:11px;height:11px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);box-shadow:0 0 14px 1px rgba(255,171,61,.55)}
+  .brand .dia{width:11px;height:11px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);box-shadow:var(--glow)}
   .brand .wm{font-weight:600;letter-spacing:.34em;font-size:.82rem;text-transform:uppercase}
-  .nav .back{margin-left:auto;font-family:var(--font-mono);font-size:.74rem;color:var(--ink-3);border:0}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:.75rem}
+  .theme-pill{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;padding:.45rem .85rem;border:1px solid var(--line-2);border-radius:999px;background:transparent;color:var(--ink-2);cursor:pointer}
+  .theme-pill:hover{border-color:var(--ink-3);color:var(--ink)}
+  .theme-pill .tp-light{display:none}
+  html[data-theme="light"] .theme-pill .tp-dark{display:none}
+  html[data-theme="light"] .theme-pill .tp-light{display:inline}
+  .nav .back{font-family:var(--font-mono);font-size:.74rem;color:var(--ink-3);border:0}
   .hero{padding:3.5rem 0 2rem}
   .eyebrow{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
   .hero h1{font-size:clamp(2.2rem,5vw,3.4rem);line-height:1.05;margin-top:.9rem;max-width:18ch}
@@ -58,7 +84,12 @@
 
 <nav class="nav">
   <a class="brand" href="index.html"><span class="dia" aria-hidden="true"></span><span class="wm">Vestige</span></a>
-  <a class="back" href="index.html">&larr; Home</a>
+  <div class="nav-right">
+    <button id="theme-pill" class="theme-pill" type="button" aria-label="Toggle light/dark theme">
+      <span class="tp-dark">☾ dark</span><span class="tp-light">☀ light</span>
+    </button>
+    <a class="back" href="index.html">&larr; Home</a>
+  </div>
 </nav>
 
 <main class="wrap">
@@ -137,6 +168,12 @@
 
 <script>
 (function(){
+  document.getElementById("theme-pill").onclick = function () {
+    var next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("vestige-theme", next); } catch (e) { /* private mode */ }
+  };
+
   var API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
     ? "http://localhost:8000"
     : "https://vestige-api-mm24ltq7ja-uc.a.run.app";

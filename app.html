@@ -7,7 +7,7 @@
   <script>
     // Resolve + apply the theme BEFORE the stylesheet below paints, so there's no flash of the
     // wrong theme. localStorage wins over OS preference; dark is the no-preference default.
-    // Deliberately does not touch maplibregl — this must run long before that script loads.
+    // Shared with index.html and sources.html via localStorage["vestige-theme"].
     (function () {
       var t;
       try { t = localStorage.getItem("vestige-theme"); } catch (e) { t = null; }
