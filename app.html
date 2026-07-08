@@ -787,7 +787,6 @@
     }
 
     function showDossier(p) {
-      const generated = truthy(p, "narrative_is_generated");
       const hasImpact = truthy(p, "impact_source_present");
       const isQuake = p.hazard_class === "earthquake";
       $("p-class").textContent = (p.hazard_type || "event").replace(/_/g, " ");
@@ -797,8 +796,21 @@
       $("p-mag").innerHTML = (iv === null || iv === undefined)
         ? ""
         : (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
-      $("p-summary").textContent = p.narrative || "";
-      $("p-gen").textContent = generated ? "⚙ Summary generated from the source below" : "";
+      // Track A: prefer NCEI agency prose (event → episode) over the templated fallback. Never invent.
+      const agency = (p.agency_narrative || "").trim();
+      const episode = (p.episode_narrative || "").trim();
+      const templated = (p.narrative || "").trim();
+      if (agency) {
+        $("p-summary").textContent = agency;
+        $("p-gen").textContent = "NCEI narrative";
+      } else if (episode) {
+        $("p-summary").textContent = episode;
+        $("p-gen").textContent = "NCEI episode narrative";
+      } else {
+        $("p-summary").textContent = templated;
+        $("p-gen").textContent = truthy(p, "narrative_is_generated")
+          ? "⚙ Summary generated from the source below" : "";
+      }
       // p.time is already the canonical UTC ISO string — display it directly, don't re-parse
       // through Date() (which would reinterpret a naive/offset time in the viewer's local zone).
       $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
