@@ -11,8 +11,29 @@
       --line:rgba(150,172,190,.14); --line-2:rgba(150,172,190,.24);
       --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#586472;
       --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff;
+      /* translucent glass surfaces + tints — kept as vars so light mode can restate them without
+         touching any dark-mode value below (dark stays pixel-identical to before this change) */
+      --glass:rgba(14,18,25,.85); --glass-2:rgba(11,14,20,.66); --glass-3:rgba(11,14,20,.92);
+      --header-fade:rgba(8,10,15,.9);
+      --beacon-tint:rgba(255,171,61,.12); --beacon-tint-active:rgba(255,171,61,.1);
+      --glow:0 0 12px 1px rgba(255,171,61,.55);
+      --row-bg:rgba(20,25,36,.4); --row-bg-hover:rgba(20,25,36,.75); --honesty-bg:rgba(20,25,36,.5);
       --font-body:"Avenir Next","Avenir",system-ui,sans-serif;
       --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
+    }
+    /* Light theme: the same atlas photographed in daylight, not an inversion — warm paper field,
+       ink text, the amber beacon deepened to a burnt-sepia ink so it reads as printed record
+       rather than glowing signal. Cool cyan track ink stays the one deliberate outsider color. */
+    html[data-theme="light"]{
+      --bg:#f3efe6; --panel:#faf7f0; --panel-2:#efeadf;
+      --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
+      --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
+      --beacon:#a8690a; --beacon-2:#8a5407; --quake:#d9891c; --track:#0c7bb3;
+      --glass:rgba(250,247,240,.85); --glass-2:rgba(250,247,240,.72); --glass-3:rgba(250,247,240,.92);
+      --header-fade:rgba(243,239,230,.9);
+      --beacon-tint:rgba(168,105,10,.12); --beacon-tint-active:rgba(168,105,10,.1);
+      --glow:0 1px 6px rgba(74,60,34,.3);
+      --row-bg:rgba(239,234,223,.5); --row-bg-hover:rgba(239,234,223,.85); --honesty-bg:rgba(239,234,223,.6);
     }
     *{box-sizing:border-box}
     html,body{margin:0;height:100%}
@@ -22,18 +43,18 @@
 
     header{
       position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:.7rem;
-      padding:.7rem 1rem;background:linear-gradient(180deg,rgba(8,10,15,.9),transparent);
+      padding:.7rem 1rem;background:linear-gradient(180deg,var(--header-fade),transparent);
       pointer-events:none;
     }
     .dia{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;background:var(--beacon);
-      box-shadow:0 0 12px 1px rgba(255,171,61,.55)}
+      box-shadow:var(--glow)}
     .home{display:inline-flex;align-items:center;gap:.7rem;pointer-events:auto;color:inherit;text-decoration:none}
     .wm{font-weight:600;letter-spacing:.32em;font-size:.78rem;text-transform:uppercase}
     header .sub{font-family:var(--font-mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.04em}
 
     .legend{
       position:absolute;left:1rem;bottom:1rem;z-index:5;font-family:var(--font-mono);font-size:.68rem;
-      color:var(--ink-2);background:rgba(11,14,20,.66);border:1px solid var(--line);border-radius:10px;
+      color:var(--ink-2);background:var(--glass-2);border:1px solid var(--line);border-radius:10px;
       padding:.6rem .8rem;backdrop-filter:blur(8px);line-height:1.7;max-width:15rem;
     }
     .legend b{color:var(--beacon)}
@@ -44,7 +65,7 @@
     .legend .ct{color:var(--track)}
     .legend .cy{color:var(--beacon)}
     .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
-      background:rgba(255,171,61,.12);margin-right:.4rem;vertical-align:middle}
+      background:var(--beacon-tint);margin-right:.4rem;vertical-align:middle}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -58,8 +79,8 @@
     aside#county-panel{z-index:6}
     .clist{padding:1rem 1.4rem 1.4rem;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem}
     .crow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.55rem .7rem;
-      border:1px solid var(--line);border-radius:8px;cursor:pointer;background:rgba(20,25,36,.4)}
-    .crow:hover{border-color:var(--line-2);background:rgba(20,25,36,.75)}
+      border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--row-bg)}
+    .crow:hover{border-color:var(--line-2);background:var(--row-bg-hover)}
     .crow .htype{font-size:.86rem;text-transform:capitalize}
     .crow .cmeta{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
     .crow .hdate{font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
@@ -79,7 +100,7 @@
     .meta .k{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}
     .meta .v{font-size:.92rem;margin-top:.15rem;font-variant-numeric:tabular-nums}
     .honesty{margin:1.2rem 1.4rem 0;padding:.9rem 1rem;border:1px solid var(--line);border-radius:10px;
-      background:rgba(20,25,36,.5)}
+      background:var(--honesty-bg)}
     .chip{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.66rem;
       border:1px solid var(--line-2);border-radius:999px;padding:.25rem .6rem;color:var(--ink-2)}
     .chip .d{width:6px;height:6px;border-radius:50%;background:var(--beacon)}
@@ -104,13 +125,13 @@
     .filter-pill{
       position:absolute;top:2.6rem;right:1rem;z-index:5;
       font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
-      background:rgba(14,18,25,.85);border:1px solid var(--line);color:var(--ink-2);
+      background:var(--glass);border:1px solid var(--line);color:var(--ink-2);
       border-radius:999px;padding:.45rem .85rem;cursor:pointer;backdrop-filter:blur(8px);
     }
-    .filter-pill.active{border-color:var(--beacon);color:var(--beacon);background:rgba(255,171,61,.1)}
+    .filter-pill.active{border-color:var(--beacon);color:var(--beacon);background:var(--beacon-tint-active)}
     .filter-panel{
       position:absolute;top:5rem;right:1rem;z-index:5;width:15.5rem;
-      background:rgba(11,14,20,.92);border:1px solid var(--line);border-radius:10px;
+      background:var(--glass-3);border:1px solid var(--line);border-radius:10px;
       backdrop-filter:blur(8px);display:none;overflow:hidden;
     }
     .filter-panel.open{display:block}
@@ -121,7 +142,7 @@
     .fchip{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:.66rem;
       border:1px solid var(--line-2);border-radius:999px;padding:.25rem .6rem;color:var(--ink-2);
       cursor:pointer;margin:0 .3rem .3rem 0;background:transparent}
-    .fchip.on{border-color:var(--beacon);color:var(--beacon);background:rgba(255,171,61,.12)}
+    .fchip.on{border-color:var(--beacon);color:var(--beacon);background:var(--beacon-tint)}
     .frange{display:flex;flex-direction:column;gap:.5rem}
     .frange label{display:flex;justify-content:space-between;font-family:var(--font-mono);
       font-size:.62rem;color:var(--ink-3)}
@@ -211,24 +232,47 @@
     const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
       ? "http://localhost:8000"
       : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
+
+    // MapLibre paint values are JS, not CSS — this object drives both basemaps' layer paint.
+    // Kept in sync with the CSS token pairs above (dark literals match the :root values; light
+    // literals match the html[data-theme="light"] values) so the map and the chrome always agree.
+    const MAP_THEME = {
+      dark: {
+        style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+        county: "#ffab3d", countyFillOp: 0.12, countyLineOp: 0.6,
+        track: "#57c7ff",
+        quakeCore: "#ffbe5c", quakeGlow: "#f6b23c", glowOp: 0.14,
+        quakeStroke: "rgba(8,10,15,.7)"
+      },
+      light: {
+        style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+        county: "#a8690a", countyFillOp: 0.10, countyLineOp: 0.55,
+        track: "#0c7bb3",
+        quakeCore: "#d9891c", quakeGlow: "#d9891c", glowOp: 0.18,
+        quakeStroke: "rgba(94,62,10,.45)"
+      }
+    };
+    const EMPTY_FC = { type: "FeatureCollection", features: [] };
+
+    // Resolved once at load; theme SELECTION (persistence, toggle UI, FOUC-safe head script)
+    // lands in a follow-up commit — for now this only decides which basemap/paint set to use.
+    let currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    let fc = EMPTY_FC, places = EMPTY_FC;
+
     const map = new maplibregl.Map({
       container: "map",
-      style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+      style: MAP_THEME[currentTheme].style,
       center: [-82.3, 35.85],
       zoom: 6.3,
       attributionControl: { compact: true }
     });
     window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
 
-    map.on("load", async () => {
-      const EMPTY_FC = { type: "FeatureCollection", features: [] };
-      const [fc, placesRaw] = await Promise.all([
-        fetch(API_BASE + "/api/events").then(r => r.json()),
-        // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
-        // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
-        fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC)
-      ]);
-      const places = placesRaw && placesRaw.type === "FeatureCollection" ? placesRaw : EMPTY_FC;
+    // Extracted so a theme toggle (which calls map.setStyle(), wiping ALL sources/layers) can
+    // rebuild the same sources/layers against the new basemap. Paint always comes from
+    // MAP_THEME[currentTheme] — never a literal — so dark/light never drift out of sync.
+    function addDataLayers() {
+      const theme = MAP_THEME[currentTheme];
       // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
       // render at the precision it actually has — a track never becomes a pin, a point never a line.
       map.addSource("events", { type: "geojson", data: fc });
@@ -238,14 +282,15 @@
 
       // County attribution: a DASHED outline + faint fill deliberately reads as an administrative
       // attribution, NEVER a measured extent or a pinpoint. Drawn first (under everything else).
+      // Fill opacity stays ≤0.10 in light (design-lock: attribution, never a measured extent).
       map.addLayer({
         id: "counties-fill", type: "fill", source: "places",
-        paint: { "fill-color": "#ffab3d", "fill-opacity": 0.12 }
+        paint: { "fill-color": theme.county, "fill-opacity": theme.countyFillOp }
       });
       map.addLayer({
         id: "counties-line", type: "line", source: "places",
         paint: {
-          "line-color": "#ffab3d", "line-opacity": 0.6,
+          "line-color": theme.county, "line-opacity": theme.countyLineOp,
           "line-width": 1.3, "line-dasharray": [2, 1.6]
         }
       });
@@ -256,7 +301,7 @@
         filter: ["==", ["get", "geom_precision"], "track_line"],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": "#57c7ff",
+          "line-color": theme.track,
           "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 7, 3.6],
           "line-opacity": 0.9, "line-blur": 0.3
         }
@@ -266,7 +311,7 @@
         filter: ["==", ["get", "geom_precision"], "observed_point"],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 8, 5, 34],
-          "circle-color": "#f6b23c", "circle-opacity": 0.14, "circle-blur": 1
+          "circle-color": theme.quakeGlow, "circle-opacity": theme.glowOp, "circle-blur": 1
         }
       });
       map.addLayer({
@@ -274,10 +319,22 @@
         filter: ["==", ["get", "geom_precision"], "observed_point"],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 3, 5, 13],
-          "circle-color": "#ffbe5c", "circle-opacity": 0.9,
-          "circle-stroke-width": 1, "circle-stroke-color": "rgba(8,10,15,.7)"
+          "circle-color": theme.quakeCore, "circle-opacity": 0.9,
+          "circle-stroke-width": 1, "circle-stroke-color": theme.quakeStroke
         }
       });
+    }
+
+    map.on("load", async () => {
+      const [fcData, placesRaw] = await Promise.all([
+        fetch(API_BASE + "/api/events").then(r => r.json()),
+        // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
+        // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
+        fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC)
+      ]);
+      fc = fcData;
+      places = placesRaw && placesRaw.type === "FeatureCollection" ? placesRaw : EMPTY_FC;
+      addDataLayers();
       for (const id of ["counties-fill", "tracks", "quakes"]) {
         map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
         map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
