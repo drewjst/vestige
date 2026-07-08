@@ -150,8 +150,9 @@
     <div class="clist" id="c-list"></div>
   </aside>
 
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="initVestigeMap()"></script>
   <script>
+    function initVestigeMap() {
     // Vestige read API (separate deploy): localhost in dev, the deployed Cloud Run URL in prod.
     const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
       ? "http://localhost:8000"
@@ -362,6 +363,7 @@
         link.style.display = "none";
       }
       panel.classList.add("open");
+    }
     }
   </script>
 </body>
