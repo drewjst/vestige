@@ -18,6 +18,13 @@
       document.documentElement.dataset.theme = t;
     })();
   </script>
+  <!-- Preconnect: warm the connections these three origins will need almost immediately
+       (maplibre-gl assets, the basemap tile styles, and the read API). The API origin needs
+       crossorigin because fetch/CORS connections use a separate connection pool than a plain
+       resource fetch. -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://basemaps.cartocdn.com" />
+  <link rel="preconnect" href="https://vestige-api-mm24ltq7ja-uc.a.run.app" crossorigin />
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
     :root{
@@ -178,6 +185,27 @@
       font-size:.62rem;cursor:pointer;padding:0}
     .fempty{margin:0;padding:.6rem .85rem;font-family:var(--font-mono);font-size:.62rem;
       color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);display:none}
+    /* Quiet status pill: visible from first paint ("loading records…"), hidden once both fetches
+       in map.on("load") resolve. On an /api/events failure it stays up with honest failure copy —
+       absence of data must never read as absence of events. Built only from existing glass vars
+       so both themes work automatically. */
+    .load-pill{
+      position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);z-index:5;
+      font-family:var(--font-mono);font-size:.66rem;letter-spacing:.02em;
+      background:var(--glass-2);border:1px solid var(--line);color:var(--ink-3);
+      border-radius:999px;padding:.45rem .85rem;backdrop-filter:blur(8px);
+      pointer-events:none;animation:load-pulse 1.8s ease-in-out infinite;
+      max-width:min(90vw,26rem);white-space:normal;text-align:center;line-height:1.4;
+    }
+    .load-pill.error{color:var(--ink-2);animation:none}
+    @keyframes load-pulse{0%,100%{opacity:.65}50%{opacity:1}}
+    /* Narrow viewports: the legend sits bottom-left and, at these widths, is tall enough to reach
+       the vertical band a bottom-center pill would occupy. Raise the pill clear of it rather than
+       let them stack — the legend's own max-width (15rem) doesn't shrink with viewport width, so
+       its rendered height is stable across phone widths and a fixed clearance is safe. */
+    @media (max-width:480px){
+      .load-pill{bottom:11.5rem}
+    }
   </style>
 </head>
 <body>
@@ -217,6 +245,8 @@
     </div>
     <p id="filter-empty" class="fempty">No recorded events match this filter — that may be a gap in what's been catalogued, not evidence nothing happened here.</p>
   </div>
+
+  <div id="load-pill" class="load-pill">loading records&hellip;</div>
 
   <aside id="panel">
     <div class="p-head">
@@ -406,14 +436,28 @@
     }
 
     map.on("load", async () => {
-      const [fcData, placesRaw] = await Promise.all([
-        fetch(API_BASE + "/api/events").then(r => r.json()),
-        // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
-        // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
-        fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC)
-      ]);
-      fc = fcData;
+      const loadPill = $("load-pill");
+      // Both requests fire concurrently, same as before — but events is awaited separately so a
+      // rejection there (network error, non-JSON, etc.) can't blow up as an unhandled rejection in
+      // this async callback and can't take the places fetch down with it (Promise.all would reject
+      // the whole thing on the first rejected member).
+      const eventsPromise = fetch(API_BASE + "/api/events").then(r => r.json());
+      // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
+      // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
+      const placesPromise = fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC);
+
+      let eventsOk = true;
+      try {
+        fc = await eventsPromise;
+      } catch (err) {
+        eventsOk = false;
+        console.error("failed to load events", err);
+      }
+      const placesRaw = await placesPromise;
       places = placesRaw && placesRaw.type === "FeatureCollection" ? placesRaw : EMPTY_FC;
+
+      // fc stays EMPTY_FC on failure (its initial value), so this still renders an empty events
+      // source + whatever counties loaded — never a hard fail, never a fabricated pin.
       addDataLayers();
       for (const id of ["counties-fill", "tracks", "quakes"]) {
         map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
@@ -423,7 +467,24 @@
       map.on("click", "tracks", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "quakes", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "counties-fill", (e) => openPlace(e.features[0].properties.place_id));
-      initFilterUI(fc.features);
+      // Empty-basemap click closes the filter panel; feature clicks (handled above) leave it alone.
+      // Guard the layer list through getLayer() — mid-theme-swap, setStyle() briefly wipes layers,
+      // and queryRenderedFeatures throws on an unknown layer id in some MapLibre versions.
+      map.on("click", (e) => {
+        const interactive = ["quakes", "tracks", "counties-fill"].filter((id) => map.getLayer(id));
+        const hit = interactive.length ? map.queryRenderedFeatures(e.point, { layers: interactive }) : [];
+        if (hit.length === 0) $("filter-panel").classList.remove("open");
+      });
+
+      if (eventsOk) {
+        initFilterUI(fc.features);
+        loadPill.style.display = "none";
+      } else {
+        // Honesty contract: this copy is exact, do not reword — absence of data must never read
+        // as absence of events. Skip filter setup entirely; it has nothing real to build from.
+        loadPill.textContent = "records unavailable — the map is showing no events, not zero events.";
+        loadPill.classList.add("error");
+      }
       themeSwitchPending = false;
     });
 
@@ -597,6 +658,21 @@
     $("close").onclick = () => panel.classList.remove("open");
     $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); };
     $("theme-pill").onclick = () => setTheme(currentTheme === "light" ? "dark" : "light");
+
+    // Escape closes exactly the topmost open panel, one per keypress: event dossier (z-index 7)
+    // first, then county dossier (z-index 6), then the filter panel. Deliberately does NOT reuse
+    // #cclose's handler — that closes both dossiers at once, but Escape on the county panel alone
+    // must close only the county panel (the event panel, if any, is already gone by then).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+      } else if (countyPanel.classList.contains("open")) {
+        countyPanel.classList.remove("open");
+      } else if ($("filter-panel").classList.contains("open")) {
+        $("filter-panel").classList.remove("open");
+      }
+    });
 
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
