@@ -415,6 +415,20 @@
       applyFilters();
     }
 
+    function resetFilters() {
+      selectedHazards.clear();
+      $("filter-chips").querySelectorAll(".fchip.on").forEach((el) => el.classList.remove("on"));
+      const fromInput = $("time-from");
+      const toInput = $("time-to");
+      fromInput.value = String(minYear);
+      toInput.value = String(maxYear);
+      $("from-val").textContent = String(minYear);
+      $("to-val").textContent = String(maxYear);
+      timeFrom = null;
+      timeTo = null;
+      applyFilters();
+    }
+
     // Fetch full event detail (carries itemized impact) before opening the dossier — the
     // collection is kept lean, so impact lives on the per-event endpoint.
     async function openEvent(eventId) {
