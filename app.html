@@ -42,10 +42,10 @@
       --bg:#f3efe6; --panel:#faf7f0; --panel-2:#efeadf;
       --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
       --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
-      --beacon:#a8690a; --beacon-2:#8a5407; --quake:#d9891c; --track:#0c7bb3;
+      --beacon:#8a5407; --beacon-2:#6f4305; --quake:#d9891c; --track:#0c7bb3;
       --glass:rgba(250,247,240,.85); --glass-2:rgba(250,247,240,.72); --glass-3:rgba(250,247,240,.92);
       --header-fade:rgba(243,239,230,.9);
-      --beacon-tint:rgba(168,105,10,.12); --beacon-tint-active:rgba(168,105,10,.1);
+      --beacon-tint:rgba(138,84,7,.12); --beacon-tint-active:rgba(138,84,7,.1);
       --glow:0 1px 6px rgba(74,60,34,.3);
       --row-bg:rgba(239,234,223,.5); --row-bg-hover:rgba(239,234,223,.85); --honesty-bg:rgba(239,234,223,.6);
     }
@@ -273,7 +273,7 @@
       },
       light: {
         style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-        county: "#a8690a", countyFillOp: 0.10, countyLineOp: 0.55,
+        county: "#8a5407", countyFillOp: 0.10, countyLineOp: 0.55,
         track: "#0c7bb3",
         quakeCore: "#d9891c", quakeGlow: "#d9891c", glowOp: 0.18,
         quakeStroke: "rgba(94,62,10,.45)"
@@ -371,7 +371,23 @@
       // the map's first-ever load (only "styledata"/"idle" do), so addDataLayers() would never
       // be re-invoked and the map would be stuck on the old basemap's now-sourceless layers.
       map.setStyle(MAP_THEME[t].style, { diff: false });
+      // Recovery path: if the basemap style never loads (CDN outage, ad-blocker, offline), "style.load"
+      // never fires and themeSwitchPending would stay true forever — permanently dead-ending the toggle.
+      // An "error" listener and a timeout fallback both clear the pending flag so the user can always
+      // toggle again (e.g. back to the previously-working theme). Whichever path fires first tears down
+      // the other two, so a later, unrelated map error can't incorrectly clear a future pending swap.
+      const failTimer = setTimeout(() => {
+        map.off("error", onStyleError);
+        themeSwitchPending = false;
+      }, 12000);
+      function onStyleError() {
+        clearTimeout(failTimer);
+        themeSwitchPending = false;
+      }
+      map.once("error", onStyleError);
       map.once("style.load", () => {
+        clearTimeout(failTimer);
+        map.off("error", onStyleError);
         addDataLayers();
         applyFilters();
         themeSwitchPending = false;
