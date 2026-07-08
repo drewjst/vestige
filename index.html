@@ -5,10 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vestige — a historical atlas of extreme weather</title>
   <meta name="description" content="Search any place and see the hurricanes, floods, fires, tornadoes, quakes, and heat that shaped it — extreme-weather history mapped from the public record." />
+  <script>
+    // Same key + logic as app.html — one preference across landing + map.
+    (function () {
+      var t;
+      try { t = localStorage.getItem("vestige-theme"); } catch (e) { t = null; }
+      if (t !== "light" && t !== "dark") {
+        t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+          ? "light" : "dark";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
 <style>
-  /* ============ VESTIGE &mdash; landing concept ============ */
+  /* ============ VESTIGE — landing concept ============ */
   :root{
     --bg:#080a0f; --bg-2:#0b0e14; --panel:#0e1219; --panel-2:#131824;
     --line:rgba(150,172,190,.12); --line-2:rgba(150,172,190,.22);
@@ -17,10 +29,47 @@
     --hz-cyclone:#47d6e6; --hz-flood:#4d84ff; --hz-quake:#f6b23c;
     --hz-fire:#ff5d38; --hz-heat:#ff5ca2; --hz-winter:#8fb9d8;
     --hz-tornado:#86dfa0; --hz-hail:#c9d3dd; --hz-drought:#d79a52;
+    --nav-fade:rgba(8,10,15,.92); --nav-fade-mid:rgba(8,10,15,.55);
+    --hero-scrim-a:rgba(8,10,15,.35); --hero-scrim-b:rgba(8,10,15,.94);
+    --hero-scrim-c:rgba(8,10,15,.8); --hero-scrim-d:rgba(8,10,15,.28);
+    --hero-scrim-e:rgba(8,10,15,.9);
+    --glass-search:rgba(18,23,34,.72); --glass-chip:rgba(14,18,25,.5);
+    --glass-chip-hover:rgba(20,25,36,.7); --glass-legend:rgba(11,14,20,.6);
+    --glow:0 0 14px 1px rgba(255,171,61,.55);
+    --glow-hover:0 8px 26px -8px rgba(255,171,61,.6);
+    --focus-ring:rgba(255,171,61,.14); --pulse-ring:rgba(255,171,61,.5);
+    --sel-bg:rgba(255,171,61,.28); --sel-ink:#fff;
+    --hot-bg:rgba(255,171,61,.05);
+    --bar-grad-top:rgba(255,171,61,.85); --bar-grad-bot:rgba(255,171,61,.14);
+    --bar-grad-peak:rgba(255,171,61,.28);
+    --toast-shadow:0 20px 50px -20px rgba(0,0,0,.8);
+    --grain-opacity:.04; --canvas-opacity:1;
     --font-display:"Didot","Bodoni 72","Hoefler Text",Georgia,"Times New Roman",serif;
     --font-body:"Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
     --font-mono:ui-monospace,"SF Mono","Menlo",monospace;
     --wrap:1200px;
+  }
+  /* Archival paper — daylight counterpart to the night-beacon dark theme (matches app.html). */
+  html[data-theme="light"]{
+    --bg:#f3efe6; --bg-2:#efeadf; --panel:#faf7f0; --panel-2:#efeadf;
+    --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
+    --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
+    --beacon:#8a5407; --beacon-2:#6f4305; --beacon-ink:#faf7f0;
+    --nav-fade:rgba(243,239,230,.92); --nav-fade-mid:rgba(243,239,230,.55);
+    --hero-scrim-a:rgba(243,239,230,.35); --hero-scrim-b:rgba(243,239,230,.94);
+    --hero-scrim-c:rgba(243,239,230,.8); --hero-scrim-d:rgba(243,239,230,.28);
+    --hero-scrim-e:rgba(243,239,230,.9);
+    --glass-search:rgba(250,247,240,.72); --glass-chip:rgba(239,234,223,.5);
+    --glass-chip-hover:rgba(239,234,223,.85); --glass-legend:rgba(250,247,240,.72);
+    --glow:0 1px 6px rgba(74,60,34,.3);
+    --glow-hover:0 8px 26px -8px rgba(138,84,7,.35);
+    --focus-ring:rgba(138,84,7,.14); --pulse-ring:rgba(138,84,7,.45);
+    --sel-bg:rgba(138,84,7,.22); --sel-ink:#20242a;
+    --hot-bg:rgba(138,84,7,.06);
+    --bar-grad-top:rgba(138,84,7,.75); --bar-grad-bot:rgba(138,84,7,.12);
+    --bar-grad-peak:rgba(138,84,7,.22);
+    --toast-shadow:0 20px 50px -20px rgba(74,60,34,.18);
+    --grain-opacity:.025; --canvas-opacity:.72;
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
@@ -30,7 +79,7 @@
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
     overflow-x:hidden;
   }
-  ::selection{background:rgba(255,171,61,.28); color:#fff}
+  ::selection{background:var(--sel-bg); color:var(--sel-ink)}
   a{color:inherit; text-decoration:none}
   h1,h2,h3{margin:0; font-family:var(--font-display); font-weight:400; text-wrap:balance; letter-spacing:-.01em}
   p{margin:0}
@@ -46,7 +95,7 @@
 
   /* grain + vignette atmosphere */
   body::after{
-    content:""; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:.04;
+    content:""; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:var(--grain-opacity);
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
@@ -55,13 +104,13 @@
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; gap:1.5rem;
     padding:.85rem clamp(1.25rem,5vw,3.5rem);
-    background:linear-gradient(180deg,rgba(8,10,15,.92),rgba(8,10,15,.55) 70%,transparent);
+    background:linear-gradient(180deg,var(--nav-fade),var(--nav-fade-mid) 70%,transparent);
     backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
   }
   .brand{display:flex; align-items:center; gap:.6rem; font-weight:500}
   .brand .dia{
     width:11px; height:11px; transform:rotate(45deg); border-radius:2px;
-    background:var(--beacon); box-shadow:0 0 14px 1px rgba(255,171,61,.55);
+    background:var(--beacon); box-shadow:var(--glow);
   }
   .brand .wm{font-family:var(--font-body); font-weight:600; letter-spacing:.34em; font-size:.82rem; text-transform:uppercase}
   .nav .links{display:flex; gap:1.65rem; margin-left:1rem}
@@ -73,20 +122,25 @@
     font-family:var(--font-body); font-size:.86rem; font-weight:600; cursor:pointer;
     border:0; border-radius:999px; padding:.62rem 1.15rem; transition:transform .15s, box-shadow .2s, background .2s;
   }
-  .btn-beacon{background:var(--beacon); color:var(--beacon-ink); box-shadow:0 0 0 rgba(255,171,61,0)}
-  .btn-beacon:hover{transform:translateY(-1px); box-shadow:0 8px 26px -8px rgba(255,171,61,.6)}
+  .btn-beacon{background:var(--beacon); color:var(--beacon-ink); box-shadow:0 0 0 transparent}
+  .btn-beacon:hover{transform:translateY(-1px); box-shadow:var(--glow-hover)}
   .btn-ghost{background:transparent; color:var(--ink); border:1px solid var(--line-2)}
   .btn-ghost:hover{border-color:var(--ink-3)}
 
+  .theme-pill{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; padding:.55rem .9rem}
+  .theme-pill .tp-light{display:none}
+  html[data-theme="light"] .theme-pill .tp-dark{display:none}
+  html[data-theme="light"] .theme-pill .tp-light{display:inline}
+
   /* ============ HERO ============ */
   .hero{position:relative; min-height:94vh; display:flex; align-items:center; isolation:isolate; overflow:hidden}
-  #atlas{position:absolute; inset:0; width:100%; height:100%; z-index:-2}
+  #atlas{position:absolute; inset:0; width:100%; height:100%; z-index:-2; opacity:var(--canvas-opacity)}
   .hero::before{ /* scrim for legibility on the copy side */
     content:""; position:absolute; inset:0; z-index:-1;
     background:
-      radial-gradient(120% 90% at 82% 30%,transparent 40%,rgba(8,10,15,.35) 100%),
-      linear-gradient(90deg,rgba(8,10,15,.94) 0%,rgba(8,10,15,.8) 34%,rgba(8,10,15,.28) 62%,transparent 100%),
-      linear-gradient(0deg,rgba(8,10,15,.9),transparent 30%);
+      radial-gradient(120% 90% at 82% 30%,transparent 40%,var(--hero-scrim-a) 100%),
+      linear-gradient(90deg,var(--hero-scrim-b) 0%,var(--hero-scrim-c) 34%,var(--hero-scrim-d) 62%,transparent 100%),
+      linear-gradient(0deg,var(--hero-scrim-e),transparent 30%);
   }
   .hero .wrap{width:100%; padding-block:6rem 4rem}
   .hero-copy{max-width:44rem}
@@ -106,11 +160,11 @@
   }
   .search .field{
     flex:1; display:flex; align-items:center; gap:.6rem;
-    background:rgba(18,23,34,.72); border:1px solid var(--line-2); border-radius:12px;
+    background:var(--glass-search); border:1px solid var(--line-2); border-radius:12px;
     padding:.5rem .5rem .5rem .9rem; backdrop-filter:blur(6px);
     transition:border-color .2s, box-shadow .2s;
   }
-  .search .field:focus-within{border-color:var(--beacon); box-shadow:0 0 0 3px rgba(255,171,61,.14)}
+  .search .field:focus-within{border-color:var(--beacon); box-shadow:0 0 0 3px var(--focus-ring)}
   .search svg{flex:none; color:var(--ink-3)}
   .search input{
     flex:1; border:0; background:transparent; color:var(--ink); font-family:var(--font-body);
@@ -123,25 +177,25 @@
   .chips{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.15rem; opacity:0; animation:rise .9s .66s forwards}
   .chip{
     font-family:var(--font-mono); font-size:.76rem; color:var(--ink-2); cursor:pointer;
-    border:1px solid var(--line); border-radius:999px; padding:.4rem .8rem; background:rgba(14,18,25,.5);
+    border:1px solid var(--line); border-radius:999px; padding:.4rem .8rem; background:var(--glass-chip);
     transition:border-color .2s, color .2s, background .2s;
   }
-  .chip:hover{border-color:var(--line-2); color:var(--ink); background:rgba(20,25,36,.7)}
+  .chip:hover{border-color:var(--line-2); color:var(--ink); background:var(--glass-chip-hover)}
   .chip .dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:.5rem; vertical-align:middle}
   .trust{margin-top:2.4rem; font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; color:var(--ink-4); text-transform:uppercase; opacity:0; animation:rise .9s .8s forwards}
   .trust b{color:var(--ink-3); font-weight:500}
   .live{margin-top:.9rem; font-family:var(--font-mono); font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; display:flex; align-items:center; gap:.55rem; opacity:0; transition:opacity .6s}
   .live.show{opacity:1}
-  .live .pulse{width:7px; height:7px; border-radius:50%; background:var(--beacon); box-shadow:0 0 0 0 rgba(255,171,61,.5); animation:pulse 2s infinite; flex:none}
+  .live .pulse{width:7px; height:7px; border-radius:50%; background:var(--beacon); box-shadow:0 0 0 0 var(--pulse-ring); animation:pulse 2s infinite; flex:none}
   .live b{color:var(--ink); font-weight:600}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,171,61,.5)}70%{box-shadow:0 0 0 7px rgba(255,171,61,0)}100%{box-shadow:0 0 0 0 rgba(255,171,61,0)}}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 var(--pulse-ring)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 
   /* legend pinned to hero */
   .legend{
     position:absolute; right:clamp(1.25rem,5vw,3.5rem); bottom:2rem; z-index:2;
     display:grid; grid-template-columns:auto auto; gap:.35rem 1.1rem;
     padding:.85rem 1rem; border:1px solid var(--line); border-radius:12px;
-    background:rgba(11,14,20,.6); backdrop-filter:blur(8px);
+    background:var(--glass-legend); backdrop-filter:blur(8px);
     font-family:var(--font-mono); font-size:.7rem; color:var(--ink-2); letter-spacing:.04em;
     opacity:0; animation:rise 1s 1s forwards;
   }
@@ -189,7 +243,7 @@
   .events{display:grid; grid-template-columns:repeat(3,1fr); gap:0; border-top:1px solid var(--line)}
   .ev-card{padding:1.5rem 1.6rem; border-right:1px solid var(--line); transition:background .3s}
   .ev-card:last-child{border-right:0}
-  .ev-card.hot{background:rgba(255,171,61,.05)}
+  .ev-card.hot{background:var(--hot-bg)}
   .ev-tag{display:inline-flex; align-items:center; gap:.45rem; font-family:var(--font-mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2)}
   .ev-tag i{width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px 1px currentColor}
   .ev-card .when{font-family:var(--font-mono); font-size:.7rem; color:var(--ink-4); margin-top:.5rem}
@@ -224,8 +278,8 @@
   .chart .cap{font-family:var(--font-mono); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-4); margin-top:1rem}
   .bars{display:flex; align-items:flex-end; gap:clamp(.6rem,2vw,1.4rem); height:210px; min-width:min-content}
   .bar{flex:1; min-width:44px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%}
-  .bar .col{width:100%; border-radius:6px 6px 0 0; background:linear-gradient(180deg,rgba(255,171,61,.85),rgba(255,171,61,.14)); position:relative}
-  .bar.peak .col{background:linear-gradient(180deg,var(--beacon),rgba(255,171,61,.28))}
+  .bar .col{width:100%; border-radius:6px 6px 0 0; background:linear-gradient(180deg,var(--bar-grad-top),var(--bar-grad-bot)); position:relative}
+  .bar.peak .col{background:linear-gradient(180deg,var(--beacon),var(--bar-grad-peak))}
   .bar .v{font-family:var(--font-mono); font-size:.8rem; color:var(--ink-2); margin-bottom:.4rem; font-variant-numeric:tabular-nums}
   .bar.peak .v{color:var(--beacon-2)}
   .bar .l{font-family:var(--font-mono); font-size:.68rem; color:var(--ink-4); margin-top:.5rem}
@@ -260,7 +314,7 @@
     position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px);
     background:var(--panel-2); border:1px solid var(--line-2); color:var(--ink-2);
     font-family:var(--font-mono); font-size:.78rem; padding:.7rem 1.1rem; border-radius:10px;
-    box-shadow:0 20px 50px -20px rgba(0,0,0,.8); opacity:0; pointer-events:none;
+    box-shadow:var(--toast-shadow); opacity:0; pointer-events:none;
     transition:opacity .3s, transform .3s; z-index:200; max-width:90vw;
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
@@ -303,6 +357,9 @@
   </div>
   <div class="right">
     <span class="coord" id="navcoord">28.00&deg;N 82.53&deg;W &middot; TAMPA</span>
+    <button id="theme-pill" class="btn btn-ghost theme-pill" type="button" aria-label="Toggle light/dark theme">
+      <span class="tp-dark">☾ dark</span><span class="tp-light">☀ light</span>
+    </button>
     <a class="btn btn-beacon" href="app.html">Open the map &rarr;</a>
   </div>
 </nav>
@@ -325,9 +382,9 @@
       </div>
       <div class="chips" id="chips">
         <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>The 2021 heat dome &middot; Portland</button>
-        <button class="chip"><span class="dot" style="background:var(--hz-tornado)"></span>Every tornado within 100 mi of Nashville</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-tornado)"></span>The 2011 Joplin EF5</button>
         <button class="chip"><span class="dot" style="background:var(--hz-flood)"></span>What flooded Asheville</button>
-        <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>Deadliest heat &middot; Phoenix</button>
+        <button class="chip"><span class="dot" style="background:var(--hz-fire)"></span>2020 Almeda wildfire &middot; Oregon</button>
       </div>
       <div class="trust">Free &middot; public data &mdash; <b>NOAA Storm Events</b> &middot; <b>USGS</b> &middot; <b>FEMA</b> &middot; <b>IBTrACS</b></div>
       <div class="live" id="live" aria-live="polite"><span class="pulse"></span><span id="live-txt"></span></div>
@@ -429,7 +486,7 @@
       <div class="brand"><span class="dia" aria-hidden="true"></span><span class="wm">Vestige</span></div>
       <div class="links"><a href="app.html">Atlas</a><a href="#data" data-toast="soon">Sources</a><a href="#" data-toast="soon">About</a><a href="#" data-toast="soon">API</a></div>
     </div>
-    <p class="fine"><b>Vestige</b> &mdash; a historical atlas of extreme weather, built for curiosity. Early atlas live &mdash; western North Carolina first &middot; 2026.</p>
+    <p class="fine"><b>Vestige</b> &mdash; a historical atlas of extreme weather, built for curiosity. Early atlas live &mdash; six regions &middot; 2026.</p>
   </div>
 </footer>
 
@@ -439,6 +496,13 @@
 (function(){
   "use strict";
   var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- theme (shared localStorage key with app.html) ---------- */
+  document.getElementById("theme-pill").onclick = function () {
+    var next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("vestige-theme", next); } catch (e) { /* private mode */ }
+  };
 
   /* ---------- live coverage (real numbers from the API, never estimates) ---------- */
   var API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
@@ -535,7 +599,7 @@
   // when the atlas API is reachable, and degrades silently to the (equally real) baked count.
   var HZC = {flood:"var(--hz-flood)", cyclone:"var(--hz-cyclone)", heat:"var(--hz-heat)",
     winter:"var(--hz-winter)", tornado:"var(--hz-tornado)", earthquake:"var(--hz-quake)",
-    landslide:"var(--hz-drought)"};
+    landslide:"var(--hz-drought)", fire:"var(--hz-fire)", hail:"var(--hz-hail)"};
   var DOSSIER = [
     { id:"county:37021", tab:"Asheville, NC", short:"Asheville", head:"What you’d find under Asheville.",
       place:"Asheville &middot; Buncombe County, North Carolina",
@@ -612,6 +676,44 @@
          desc:"Eight months before Ian: a January tornado at observed coordinates.",
          metrics:[{v:"$10M",k:"property (2022)"},{v:"0",k:"deaths recorded"}],
          src:[{t:"NCEI EV 995997"},{t:"observed point",prec:true}]}
+      ]},
+    { id:"county:29097", tab:"Joplin, MO", short:"Joplin", head:"What you’d find under Joplin.",
+      place:"Joplin &middot; Jasper County, Missouri",
+      co:"NCEI Storm Events &middot; the 2011 record",
+      tiles:[{n:"34",k:"recorded events",id:"dossierCount"},{n:"2011",k:"record window"},{n:"158",k:"most deaths, one event",warn:true}],
+      foot:"34 recorded events &middot; the 158-death EF5 is NCEI EV 296617 at observed coordinates &middot; every figure a real NCEI row",
+      cards:[
+        {hot:true,hz:"tornado",tag:"Tornado &middot; EF5",when:"22 May 2011",name:"The Joplin tornado",
+         desc:"The deadliest single US tornado since 1947 — an EF5 tracked through Joplin with coordinates recorded by NWS storm survey.",
+         metrics:[{v:"158",k:"direct deaths",cls:"warn"},{v:"$2.8B",k:"property (2011)"}],
+         src:[{t:"NCEI EV 296617"},{t:"observed point",prec:true}]},
+        {hz:"hail",tag:"Thunderstorm Wind",when:"8 Nov 2011",name:"Five months later",
+         desc:"An isolated severe storm in the Joplin area — straight-line wind damage in Webb City, a measured point separate from the May catastrophe.",
+         metrics:[{v:"$10K",k:"property (2011)"},{v:"0",k:"deaths recorded"}],
+         src:[{t:"NCEI EV 347476"},{t:"observed point",prec:true}]},
+        {hz:"hail",tag:"Thunderstorm Wind",when:"24 May 2011",name:"The week before",
+         desc:"Two days before the EF5: a 60 mph gust estimated by an NWS employee at observed coordinates — the ordinary record around an extraordinary event.",
+         metrics:[{v:"0",k:"deaths recorded"},{v:"$0",k:"property recorded"}],
+         src:[{t:"NCEI EV 296927"},{t:"observed point",prec:true}]}
+      ]},
+    { id:"county:41029", tab:"Medford, OR", short:"Jackson County", head:"What you’d find under Medford.",
+      place:"Medford &middot; Jackson County, Oregon",
+      co:"NCEI Storm Events &middot; the 2020 record",
+      tiles:[{n:"18",k:"recorded events",id:"dossierCount"},{n:"2020",k:"record window"},{n:"3",k:"most deaths, one event",warn:true}],
+      foot:"18 recorded events &middot; the Almeda wildfire is NCEI EV 909610, zone-attributed to Jackson County &middot; every figure a real NCEI row",
+      cards:[
+        {hot:true,hz:"fire",tag:"Wildfire",when:"8 Sep 2020",name:"The Almeda Drive fire",
+         desc:"A wildfire through a greenway and adjacent urban area — recorded for the Jackson County forecast zone, not a measured perimeter.",
+         metrics:[{v:"3",k:"direct deaths",cls:"warn"},{v:"$10M",k:"property (2020)"}],
+         src:[{t:"NCEI EV 909610"},{t:"zone → county",prec:true}]},
+        {hz:"fire",tag:"Wildfire",when:"8 Sep 2020",name:"South Obenchain, same week",
+         desc:"A separate wildfire in the same September episode — 32,671 acres burned per NCEI narrative, but this row records zero deaths and no property damage figure.",
+         metrics:[{v:"0",k:"deaths recorded"},{v:"$0",k:"property recorded"}],
+         src:[{t:"NCEI EV 909611"},{t:"zone → county",prec:true}]},
+        {hz:"winter",tag:"Heavy Snow",when:"13 Jan 2020",name:"Before the fires",
+         desc:"The county’s January record — a heavy-snow advisory with zero deaths and no damage recorded. The same year, different hazard.",
+         metrics:[{v:"0",k:"deaths recorded"},{v:"$0",k:"property recorded"}],
+         src:[{t:"NCEI EV 865392"},{t:"zone → county",prec:true}]}
       ]}
   ];
   function dMetric(m){ return '<div><div class="mv '+(m.cls||"")+'">'+m.v+'</div><div class="mk">'+m.k+'</div></div>'; }

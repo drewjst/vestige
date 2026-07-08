@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vestige — western North Carolina · earthquakes + Helene's track</title>
+  <title>Vestige — hazard atlas · earthquakes · cyclones · wildfires · county storm impacts</title>
   <script>
     // Resolve + apply the theme BEFORE the stylesheet below paints, so there's no flash of the
     // wrong theme. localStorage wins over OS preference; dark is the no-preference default.
@@ -47,7 +47,7 @@
       --bg:#080a0f; --panel:#0e1219; --panel-2:#131824;
       --line:rgba(150,172,190,.14); --line-2:rgba(150,172,190,.24);
       --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#586472;
-      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff;
+      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff; --fire:#ff5d38;
       /* translucent glass surfaces + tints — kept as vars so light mode can restate them without
          touching any dark-mode value below (dark stays pixel-identical to before this change) */
       --glass:rgba(14,18,25,.85); --glass-2:rgba(11,14,20,.66); --glass-3:rgba(11,14,20,.92);
@@ -65,7 +65,7 @@
       --bg:#f3efe6; --panel:#faf7f0; --panel-2:#efeadf;
       --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
       --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
-      --beacon:#8a5407; --beacon-2:#6f4305; --quake:#d9891c; --track:#0c7bb3;
+      --beacon:#8a5407; --beacon-2:#6f4305; --quake:#d9891c; --track:#0c7bb3; --fire:#c44a28;
       --glass:rgba(250,247,240,.85); --glass-2:rgba(250,247,240,.72); --glass-3:rgba(250,247,240,.92);
       --header-fade:rgba(243,239,230,.9);
       --beacon-tint:rgba(138,84,7,.12); --beacon-tint-active:rgba(138,84,7,.1);
@@ -103,6 +103,9 @@
     .legend .cy{color:var(--beacon)}
     .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
       background:var(--beacon-tint);margin-right:.4rem;vertical-align:middle}
+    .legend .fi{color:var(--fire)}
+    .legend .fr{display:inline-block;width:13px;height:9px;border:1px dashed var(--fire);
+      background:rgba(255,93,56,.12);margin-right:.4rem;vertical-align:middle}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -230,12 +233,13 @@
   <div id="map"></div>
   <header>
     <a class="home" href="index.html" title="Back to home"><span class="dia"></span><span class="wm">Vestige</span></a>
-    <span class="sub">western North Carolina &middot; earthquakes &middot; cyclone tracks &middot; county storm impacts</span>
+    <span class="sub">six regions &middot; earthquakes &middot; cyclone tracks &middot; wildfires &middot; county storm impacts</span>
   </header>
   <div class="legend">
     <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
-    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
-    <span class="cty"></span><b class="cy">County impact</b> (NOAA Storm Events)<br>
+    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS)<br>
+    <span class="cty"></span><b class="cy">County storm impact</b> (NOAA)<br>
+    <span class="fr"></span><b class="fi">Wildfire</b> (NOAA) &middot; county-attributed<br>
     click any event
   </div>
 
