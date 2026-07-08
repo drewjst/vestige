@@ -18,12 +18,28 @@
       document.documentElement.dataset.theme = t;
     })();
   </script>
+  <script>
+    // Shared honest-failure setter for map-load failures (the MapLibre script itself blocked, or
+    // the initial basemap style/tiles never loading) — used both by the script tag's onerror below
+    // (which can fire before initVestigeMap has ever run) and by the map's own initial "error"
+    // handler inside initVestigeMap. Deliberately touches only static DOM, never maplibregl, so it
+    // works even when the library never loaded at all.
+    window.vestigeMapLoadFailed = function () {
+      var pill = document.getElementById("load-pill");
+      if (pill) {
+        pill.textContent = "map failed to load — no events are being shown.";
+        pill.classList.add("error");
+      }
+    };
+  </script>
   <!-- Preconnect: warm the connections these three origins will need almost immediately
-       (maplibre-gl assets, the basemap tile styles, and the read API). The API origin needs
-       crossorigin because fetch/CORS connections use a separate connection pool than a plain
-       resource fetch. -->
+       (maplibre-gl assets, the basemap tile styles, and the read API). basemaps.cartocdn.com and
+       the API origin both need crossorigin — MapLibre fetches styles/tiles in CORS mode, and so
+       does fetch() against the API, and CORS connections use a separate connection pool than a
+       plain resource fetch. unpkg.com stays a plain connection: classic <script>/<link
+       rel=stylesheet> tags, not fetch. -->
   <link rel="preconnect" href="https://unpkg.com" />
-  <link rel="preconnect" href="https://basemaps.cartocdn.com" />
+  <link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin />
   <link rel="preconnect" href="https://vestige-api-mm24ltq7ja-uc.a.run.app" crossorigin />
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
@@ -187,8 +203,10 @@
       color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);display:none}
     /* Quiet status pill: visible from first paint ("loading records…"), hidden once both fetches
        in map.on("load") resolve. On an /api/events failure it stays up with honest failure copy —
-       absence of data must never read as absence of events. Built only from existing glass vars
-       so both themes work automatically. */
+       absence of data must never read as absence of events. If the map itself never loads (script
+       blocked, initial style/tile fetch failing) a separate failure copy takes over instead — see
+       window.vestigeMapLoadFailed in <head> and the map's own initial "error" handling below.
+       Built only from existing glass vars so both themes work automatically. */
     .load-pill{
       position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);z-index:5;
       font-family:var(--font-mono);font-size:.66rem;letter-spacing:.02em;
@@ -240,7 +258,7 @@
       </div>
     </div>
     <div class="fcount">
-      <span><b id="filter-shown"></b> of <span id="filter-total"></span> events shown</span>
+      <span><b id="filter-shown"></b> of <span id="filter-total"></span> events match</span>
       <button id="filter-reset" class="reset" type="button">reset</button>
     </div>
     <p id="filter-empty" class="fempty">No recorded events match this filter — that may be a gap in what's been catalogued, not evidence nothing happened here.</p>
@@ -282,7 +300,7 @@
     <div class="clist" id="c-list"></div>
   </aside>
 
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="initVestigeMap()"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="initVestigeMap()" onerror="vestigeMapLoadFailed()"></script>
   <script>
     function initVestigeMap() {
     // Vestige read API (separate deploy): localhost in dev, the deployed Cloud Run URL in prod.
@@ -327,6 +345,18 @@
       attributionControl: { compact: true }
     });
     window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
+
+    // Honest-failure path for the INITIAL load only: if the style/tiles fail before the map has
+    // ever finished loading, map.loaded() stays false and this is the only signal the user gets
+    // that the map itself is broken (as opposed to just /api/events being down). Registered before
+    // the fetches (which only start once "load" fires) and torn down inside map.on("load") below,
+    // so it can never fire again once the initial load succeeds — deliberately separate from
+    // setTheme's own per-swap recovery, which it must not interfere with.
+    function onInitialMapError() {
+      if (map.loaded()) return;
+      vestigeMapLoadFailed();
+    }
+    map.on("error", onInitialMapError);
 
     // Extracted so a theme toggle (which calls map.setStyle(), wiping ALL sources/layers) can
     // rebuild the same sources/layers against the new basemap. Paint always comes from
@@ -409,26 +439,24 @@
       map.setStyle(MAP_THEME[t].style, { diff: false });
       // Recovery path: if the basemap style never loads (CDN outage, ad-blocker, offline), "style.load"
       // never fires and themeSwitchPending would stay true forever — permanently dead-ending the toggle.
-      // An "error" listener and a timeout fallback both clear the pending flag so the user can always
-      // toggle again (e.g. back to the previously-working theme). On success, the "style.load" handler
-      // tears down the error listener and the timer. On failure (error or timeout), only the pending
-      // flag and the OTHER failure guard are torn down — the "style.load" listener above is deliberately
+      // A 12s timeout clears the pending flag so the user can always toggle again (e.g. back to the
+      // previously-working theme). Deliberately timeout-only, NOT an "error" listener: MapLibre fires
+      // "error" for all sorts of unrelated hiccups during the swap window (a setFilter on a layer the
+      // new style hasn't re-added yet, a glyph/sprite fetch stumble) and a listener here would consume
+      // ANY of those and unlatch the guard mid-swap on a false positive — e.g. a chip click during a
+      // toggle must NOT be able to do that. (applyFilters()'s getLayer() guards below are the other
+      // half of this fix: they make a mid-swap setFilter a harmless no-op instead of a thrown error in
+      // the first place.) On success, the "style.load" handler below clears the timer itself. On
+      // timeout failure, only the pending flag is torn down — the "style.load" listener is deliberately
       // left attached, because the style may still load late and, if it does, must still get its data
       // layers. That means a failed swap followed by a recovery toggle can leave TWO "style.load"
       // listeners queued on the same eventual load; both firing is expected, and addDataLayers()'s
       // idempotency guard (above) is what makes the second firing harmless instead of an addSource() throw.
       const failTimer = setTimeout(() => {
-        map.off("error", onStyleError);
         themeSwitchPending = false;
       }, 12000);
-      function onStyleError() {
-        clearTimeout(failTimer);
-        themeSwitchPending = false;
-      }
-      map.once("error", onStyleError);
       map.once("style.load", () => {
         clearTimeout(failTimer);
-        map.off("error", onStyleError);
         addDataLayers();
         applyFilters();
         themeSwitchPending = false;
@@ -436,21 +464,39 @@
     }
 
     map.on("load", async () => {
+      // The initial-load-only failure path above is now moot — the map has loaded — so tear it
+      // down; it must never fire again (in particular, it must not fire on later toggle-time errors).
+      map.off("error", onInitialMapError);
       const loadPill = $("load-pill");
       // Both requests fire concurrently, same as before — but events is awaited separately so a
-      // rejection there (network error, non-JSON, etc.) can't blow up as an unhandled rejection in
-      // this async callback and can't take the places fetch down with it (Promise.all would reject
-      // the whole thing on the first rejected member).
-      const eventsPromise = fetch(API_BASE + "/api/events").then(r => r.json());
+      // rejection there (network error, non-JSON, non-2xx status, wrong shape, etc.) can't blow up
+      // as an unhandled rejection in this async callback and can't take the places fetch down with
+      // it (Promise.all would reject the whole thing on the first rejected member).
+      const eventsPromise = fetch(API_BASE + "/api/events").then((r) => {
+        // A FastAPI 500 still resolves with a JSON error body — r.ok is the only way to catch that
+        // before it's mistaken for real data. Throwing here routes it into the same catch below as
+        // a network-level rejection, so there's exactly one failure path to keep honest.
+        if (!r.ok) throw new Error("events fetch failed: " + r.status);
+        return r.json();
+      });
       // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
       // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
       const placesPromise = fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC);
 
       let eventsOk = true;
       try {
-        fc = await eventsPromise;
+        const eventsRaw = await eventsPromise;
+        // Shape check, mirroring the places validation just below: valid JSON that isn't actually a
+        // FeatureCollection (an error body, or some future differently-shaped success response) must
+        // fail the same way a rejected fetch does — not get handed to addDataLayers()/initFilterUI()
+        // and thrown from deep inside them, leaving the pill stuck on "loading records…" forever.
+        if (!eventsRaw || eventsRaw.type !== "FeatureCollection") {
+          throw new Error("events response was not a FeatureCollection");
+        }
+        fc = eventsRaw;
       } catch (err) {
         eventsOk = false;
+        fc = EMPTY_FC;
         console.error("failed to load events", err);
       }
       const placesRaw = await placesPromise;
@@ -484,6 +530,9 @@
         // as absence of events. Skip filter setup entirely; it has nothing real to build from.
         loadPill.textContent = "records unavailable — the map is showing no events, not zero events.";
         loadPill.classList.add("error");
+        // A clickable-looking FILTER pill with nothing real to filter is a lie of affordance —
+        // hide it rather than let it open an empty/stale panel.
+        $("filter-pill").style.display = "none";
       }
       themeSwitchPending = false;
     });
@@ -557,10 +606,15 @@
       return clauses.length > 1 ? ["all", ...clauses] : base;
     }
 
+    // Guarded per-layer: mid-theme-swap, setStyle() briefly wipes all layers, and a chip click or
+    // time-range drag in that window would otherwise throw a setFilter-on-missing-layer error (see
+    // setTheme's recovery comment above for why that error must not be allowed to reach the map at
+    // all). The style.load re-run already re-applies filters once the new layers exist, so a no-op
+    // here is correct, not a dropped update. updateCount()/updateBadge() are DOM-only and always run.
     function applyFilters() {
-      map.setFilter("tracks", withUserFilters(baseFilterFor("track_line")));
-      map.setFilter("quakes-glow", withUserFilters(baseFilterFor("observed_point")));
-      map.setFilter("quakes", withUserFilters(baseFilterFor("observed_point")));
+      if (map.getLayer("tracks")) map.setFilter("tracks", withUserFilters(baseFilterFor("track_line")));
+      if (map.getLayer("quakes-glow")) map.setFilter("quakes-glow", withUserFilters(baseFilterFor("observed_point")));
+      if (map.getLayer("quakes")) map.setFilter("quakes", withUserFilters(baseFilterFor("observed_point")));
       updateCount();
       updateBadge();
     }
