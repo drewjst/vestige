@@ -59,7 +59,7 @@
       --bg:#080a0f; --panel:#0e1219; --panel-2:#131824;
       --line:rgba(150,172,190,.14); --line-2:rgba(150,172,190,.24);
       --ink:#eef2f6; --ink-2:#b4bfcc; --ink-3:#7c8896; --ink-4:#586472;
-      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff;
+      --beacon:#ffab3d; --beacon-2:#ffc873; --quake:#f6b23c; --track:#57c7ff; --fire:#ff5d38;
       /* translucent glass surfaces + tints — kept as vars so light mode can restate them without
          touching any dark-mode value below (dark stays pixel-identical to before this change) */
       --glass:rgba(14,18,25,.85); --glass-2:rgba(11,14,20,.66); --glass-3:rgba(11,14,20,.92);
@@ -77,7 +77,7 @@
       --bg:#f3efe6; --panel:#faf7f0; --panel-2:#efeadf;
       --line:rgba(74,60,34,.16); --line-2:rgba(74,60,34,.32);
       --ink:#20242a; --ink-2:#4a5058; --ink-3:#6f757d; --ink-4:#979da5;
-      --beacon:#8a5407; --beacon-2:#6f4305; --quake:#d9891c; --track:#0c7bb3;
+      --beacon:#8a5407; --beacon-2:#6f4305; --quake:#d9891c; --track:#0c7bb3; --fire:#c44a28;
       --glass:rgba(250,247,240,.85); --glass-2:rgba(250,247,240,.72); --glass-3:rgba(250,247,240,.92);
       --header-fade:rgba(243,239,230,.9);
       --beacon-tint:rgba(138,84,7,.12); --beacon-tint-active:rgba(138,84,7,.1);
@@ -189,6 +189,10 @@
     .crow .cmeta{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
     .crow .hdate{font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
     .crow .cflag{font-family:var(--font-mono);font-size:.56rem;color:var(--beacon);letter-spacing:.04em}
+    .csection{margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--line)}
+    .csection-h{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--ink-3);margin-bottom:.35rem}
+    .csection-note{font-size:.72rem;color:var(--ink-4);line-height:1.4;margin:0 0 .5rem}
     .p-head{display:flex;justify-content:space-between;align-items:flex-start;padding:1.4rem 1.4rem 0}
     .eyebrow{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
     #close{background:none;border:0;color:var(--ink-3);font-size:1.4rem;cursor:pointer;line-height:1}
@@ -220,12 +224,25 @@
     .impact-row .ik{color:var(--ink-3)}
     .impact-row .iv{color:var(--ink);font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
     .impact-prov{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-4);margin-top:.6rem;line-height:1.4}
-    .src{margin:auto 1.4rem 1.4rem;padding-top:1rem}
+    .src{margin:1.2rem 1.4rem 1.4rem;padding-top:1rem}
     .src a{font-family:var(--font-mono);font-size:.76rem;color:var(--beacon);text-decoration:none;
       border:1px solid var(--line-2);border-radius:8px;padding:.5rem .8rem;display:inline-flex;gap:.4rem}
     .src a:hover{border-color:var(--beacon)}
-    .src .lbl{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+    .src .lbl,.related .lbl{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
       color:var(--ink-4);display:block;margin-bottom:.5rem}
+    /* Related reading — under source trail; never a source of impact figures. */
+    .related{margin:0 1.4rem 1.4rem;padding-top:.2rem}
+    .related .lbl{margin-bottom:.35rem}
+    .related .disclaimer{font-size:.72rem;color:var(--ink-4);line-height:1.4;margin:0 0 .55rem}
+    .related-list{display:flex;flex-direction:column;gap:.45rem}
+    .related-row{display:flex;flex-direction:column;gap:.2rem;padding:.45rem .55rem;
+      border:1px solid var(--line);border-radius:8px;text-decoration:none;color:inherit}
+    .related-row:hover{border-color:var(--beacon)}
+    .related-row .rtop{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+    .related-row .rkind{font-family:var(--font-mono);font-size:.58rem;letter-spacing:.06em;text-transform:uppercase;
+      border:1px solid var(--line-2);border-radius:999px;padding:.15rem .45rem;color:var(--ink-3)}
+    .related-row .rtitle{font-size:.82rem;color:var(--beacon);line-height:1.3}
+    .related-row .rhost{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-4)}
     .filter-pill{
       position:absolute;top:2.6rem;right:1rem;z-index:5;
       font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
@@ -372,6 +389,11 @@
     <div class="src">
       <span class="lbl">Source trail</span><br>
       <a id="p-srclink" href="#" target="_blank" rel="noopener">USGS record &rarr;</a>
+    </div>
+    <div class="related" id="p-related" hidden>
+      <span class="lbl">Related reading</span>
+      <p class="disclaimer">Related coverage — not a source of impact figures.</p>
+      <div class="related-list" id="p-related-list"></div>
     </div>
   </aside>
 
@@ -1377,6 +1399,7 @@
 
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
+    // FEMA designations group under Federal declarations — administrative, never a loss measure.
     function showCountyDossier(place) {
       $("c-name").textContent = place.name + (place.state ? ", " + place.state : "");
       // total_events is the true (uncapped) count; event_count is the same value (API contract —
@@ -1400,26 +1423,40 @@
       $("c-list").innerHTML = events.map((e) => {
         const type = (e.hazard_type || "event").replace(/_/g, " ");
         const date = (e.time || "").slice(0, 10);
-        const flag = truthy(e, "impact_source_present") ? '<span class="cflag">impact ✓</span>' : "";
+        // FEMA is administrative only — never an impact ✓, even if a bad payload claims otherwise.
+        const flag = e.source !== "fema" && truthy(e, "impact_source_present")
+          ? '<span class="cflag">impact ✓</span>' : "";
         return `<div class="crow" data-id="${e.event_id}"><span class="htype">${type}</span>` +
                `<span class="cmeta"><span class="hdate">${date}</span>${flag}</span></div>`;
-      }).join("");
+      }
+      let html = other.map(rowHtml).join("");
+      if (fema.length) {
+        html += `<div class="csection">` +
+          `<div class="csection-h">Federal declarations</div>` +
+          `<p class="csection-note">Declared by FEMA — administrative designation, not a measure of losses.</p>` +
+          fema.map(rowHtml).join("") +
+          `</div>`;
+      }
+      $("c-list").innerHTML = html;
       $("c-list").querySelectorAll(".crow").forEach((el) => {
         el.onclick = () => openEvent(el.dataset.id);
       });
       countyPanel.classList.add("open");
     }
 
-    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
-    const truthy = (o, k) => o[k] === true || o[k] === "true";
-
     // What each source can and cannot tell you — used to word impact-absence truthfully per source.
     const IMPACT_SILENCE = {
       usgs: "USGS catalogs magnitude and location, not casualties or damage",
       ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses",
-      storm_events: "this source records location and intensity, not itemized impact"
+      storm_events: "this source records location and intensity, not itemized impact",
+      fema: "FEMA declarations are administrative designations, not a measure of losses"
     };
-    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report", storm_events: "NCEI Storm Events record" };
+    const SRC_LABEL = {
+      usgs: "USGS record",
+      ibtracs: "NHC report",
+      storm_events: "NCEI Storm Events record",
+      fema: "FEMA declaration"
+    };
 
     // Human labels for the itemized event_impact kinds. Damage kinds render as as-recorded USD.
     const IMPACT_LABEL = {
@@ -1444,8 +1481,46 @@
       return `<div class="impact-h">Recorded impact <span>(itemized — never summed)</span></div>` + rows + prov;
     }
 
+    // Related reading kind badges. Curated coverage only — never mixed into impact.
+    const LINK_KIND_LABEL = {
+      agency_report: "Agency report",
+      news: "News",
+      wikipedia: "Wikipedia",
+      other: "Other"
+    };
+
+    function safeHttpUrl(url) {
+      try {
+        const u = new URL(url);
+        return (u.protocol === "http:" || u.protocol === "https:") ? u.href : "";
+      } catch (_) { return ""; }
+    }
+    function linkHost(url) {
+      try { return new URL(url).hostname.replace(/^www\./, ""); }
+      catch (_) { return ""; }
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+    // Kind badge + title + host. Returns "" when empty so the section stays hidden.
+    // Only http(s) hrefs — escapeHtml alone does not block javascript: URLs.
+    function renderRelatedLinks(links) {
+      if (!Array.isArray(links) || links.length === 0) return "";
+      return links.map((l) => {
+        const href = safeHttpUrl(l.url || "");
+        if (!href) return "";
+        const kind = LINK_KIND_LABEL[l.kind] || l.kind || "link";
+        const host = linkHost(href);
+        return `<a class="related-row" href="${escapeHtml(href)}" target="_blank" rel="noopener">` +
+               `<span class="rtop"><span class="rkind">${escapeHtml(kind)}</span>` +
+               `<span class="rtitle">${escapeHtml(l.title || href || "Link")}</span></span>` +
+               (host ? `<span class="rhost">${escapeHtml(host)}</span>` : "") +
+               `</a>`;
+      }).join("");
+    }
+
     function showDossier(p) {
-      const generated = truthy(p, "narrative_is_generated");
       const hasImpact = truthy(p, "impact_source_present");
       const isQuake = p.hazard_class === "earthquake";
       $("p-class").textContent = (p.hazard_type || "event").replace(/_/g, " ");
@@ -1455,8 +1530,21 @@
       $("p-mag").innerHTML = (iv === null || iv === undefined)
         ? ""
         : (isQuake ? "M" + iv : iv) + "<small>" + (p.intensity_unit || "") + "</small>";
-      $("p-summary").textContent = p.narrative || "";
-      $("p-gen").textContent = generated ? "⚙ Summary generated from the source below" : "";
+      // Track A: prefer NCEI agency prose (event → episode) over the templated fallback. Never invent.
+      const agency = (p.agency_narrative || "").trim();
+      const episode = (p.episode_narrative || "").trim();
+      const templated = (p.narrative || "").trim();
+      if (agency) {
+        $("p-summary").textContent = agency;
+        $("p-gen").textContent = "NCEI narrative";
+      } else if (episode) {
+        $("p-summary").textContent = episode;
+        $("p-gen").textContent = "NCEI episode narrative";
+      } else {
+        $("p-summary").textContent = templated;
+        $("p-gen").textContent = truthy(p, "narrative_is_generated")
+          ? "⚙ Summary generated from the source below" : "";
+      }
       // p.time is already the canonical UTC ISO string — display it directly, don't re-parse
       // through Date() (which would reinterpret a naive/offset time in the viewer's local zone).
       $("p-when").textContent = (p.time || "").replace("T", " ").slice(0, 19);
@@ -1467,17 +1555,25 @@
         ? "This record reaches back to " + p.record_begins.slice(0, 4)
         : "";
       // impact honesty: itemized facts when the source recorded them; otherwise absence shown AS
-      // DATA, never as an implied zero — worded per source.
-      const impactHtml = renderImpact(p.impact);
+      // DATA, never as an implied zero — worded per source. FEMA never mixes into impact rows.
       const silence = IMPACT_SILENCE[p.source] || "this source records location and intensity, not impact";
-      $("p-impact-list").innerHTML = impactHtml;
-      if (impactHtml) {
-        $("p-impact").style.display = "none";
-      } else {
+      if (p.source === "fema") {
+        $("p-impact-list").innerHTML = "";
         $("p-impact").style.display = "";
-        $("p-impact").innerHTML = hasImpact
-          ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
-          : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+        $("p-impact").innerHTML =
+          "<b>Declared by FEMA — administrative designation, not a measure of losses.</b> " +
+          IMPACT_SILENCE.fema + " — this is missing data, not zero.";
+      } else {
+        const impactHtml = renderImpact(p.impact);
+        $("p-impact-list").innerHTML = impactHtml;
+        if (impactHtml) {
+          $("p-impact").style.display = "none";
+        } else {
+          $("p-impact").style.display = "";
+          $("p-impact").innerHTML = hasImpact
+            ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
+            : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+        }
       }
       // source trail: link straight to the server-provided authoritative record (no client derivation).
       const link = $("p-srclink");
@@ -1488,6 +1584,10 @@
       } else {
         link.style.display = "none";
       }
+      // Related reading (detail path only) — sibling of impact, never a loss figure.
+      const relatedHtml = renderRelatedLinks(p.links);
+      $("p-related-list").innerHTML = relatedHtml;
+      $("p-related").hidden = !relatedHtml;
       panel.classList.add("open");
     }
     }

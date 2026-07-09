@@ -20,6 +20,7 @@ Every feature's `properties` carry the honesty facts:
 | `impact_source_present` | whether this source recorded impact (else absence is data) |
 | `narrative_is_generated` | whether the summary was templated from fields |
 | `source_url` | link to the authoritative record |
+| `links` | detail path only — curated Related reading (`url`, `title`, `kind`, `matched_by`, `published_at`); never mixed into impact |
 
 ```json
 {
@@ -32,7 +33,16 @@ Every feature's `properties` carry the honesty facts:
     "intensity_unit": "kt",
     "geom_precision": "track_line",
     "impact_source_present": false,
-    "source_url": "https://www.nhc.noaa.gov/data/tcr/AL092024_Helene.pdf"
+    "source_url": "https://www.nhc.noaa.gov/data/tcr/AL092024_Helene.pdf",
+    "links": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Hurricane_Helene",
+        "title": "Hurricane Helene",
+        "kind": "wikipedia",
+        "matched_by": "manual",
+        "published_at": null
+      }
+    ]
   }
 }
 ```
