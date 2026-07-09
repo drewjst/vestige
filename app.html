@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vestige — western North Carolina · earthquakes + Helene's track</title>
+  <title>Vestige — county storm impacts, earthquakes &amp; storm tracks</title>
   <script>
     // Resolve + apply the theme BEFORE the stylesheet below paints, so there's no flash of the
     // wrong theme. localStorage wins over OS preference; dark is the no-preference default.
@@ -100,6 +100,47 @@
     .home{display:inline-flex;align-items:center;gap:.7rem;pointer-events:auto;color:inherit;text-decoration:none}
     .wm{font-weight:600;letter-spacing:.32em;font-size:.78rem;text-transform:uppercase}
     header .sub{font-family:var(--font-mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.04em}
+    /* Search: sits inline in the header flow (after the strapline), NOT absolutely positioned like
+       the theme/filter pills — it needs its own pointer-events:auto since header itself is
+       pointer-events:none (see .home above for the same pattern). Capped width so it never reaches
+       under the top-right pills at normal viewport widths; the narrow-viewport media query below
+       hides the strapline and shrinks this further so the two never collide down to phone widths. */
+    .search-wrap{position:relative;pointer-events:auto;flex:1 1 auto;max-width:22rem;min-width:8rem;margin-left:.4rem}
+    .search-input{
+      width:100%;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.02em;
+      background:var(--glass);border:1px solid var(--line);color:var(--ink);
+      border-radius:999px;padding:.42rem .9rem;outline:none;
+    }
+    .search-input::placeholder{color:var(--ink-4)}
+    .search-input:focus{border-color:var(--line-2)}
+    /* The topmost layer of the Esc-stack when open (z-index 8, above the event dossier's 7) — see
+       the app's Escape handler: search results close first, before either dossier or the filter
+       panel. */
+    .search-results{
+      position:absolute;top:calc(100% + .4rem);left:0;right:0;z-index:8;
+      background:var(--glass-3);border:1px solid var(--line);border-radius:10px;
+      backdrop-filter:blur(8px);overflow-y:auto;max-height:60vh;display:none;
+    }
+    .search-results.open{display:block}
+    .sresult{padding:.55rem .85rem;font-size:.82rem;cursor:pointer;border-top:1px solid var(--line)}
+    .sresult:first-child{border-top:0}
+    .sresult:hover,.sresult.active{background:var(--row-bg-hover)}
+    .sresult-empty{padding:.6rem .85rem;font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3)}
+    @media (max-width:640px){
+      header .sub{display:none}
+      .search-wrap{max-width:11rem;margin-left:0}
+    }
+    /* Honest-failure/no-match toast — same visual language as .load-pill, but dismissable and
+       reused for anything that must never silently no-op (see item 2, "?q=" / "?place=" deep
+       links with no match). z-index above the search results dropdown: it can appear WHILE a
+       dropdown is open (a bad ?q= deep link on load, for instance). */
+    .honest-toast{
+      position:absolute;top:4.4rem;left:50%;transform:translateX(-50%);z-index:9;
+      max-width:min(90vw,26rem);background:var(--glass-2);border:1px solid var(--line);
+      color:var(--ink-2);border-radius:10px;padding:.6rem .9rem;font-size:.8rem;line-height:1.4;
+      text-align:center;backdrop-filter:blur(8px);display:none;cursor:pointer;
+    }
+    .honest-toast.show{display:block}
 
     .legend{
       position:absolute;left:1rem;bottom:1rem;z-index:5;font-family:var(--font-mono);font-size:.68rem;
@@ -115,6 +156,10 @@
     .legend .cy{color:var(--beacon)}
     .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
       background:var(--beacon-tint);margin-right:.4rem;vertical-align:middle}
+    /* Drew ruling 2026-07-08 (Task 10 item 3, territory copy) — verbatim text lives in the markup,
+       this just gives it its own visual weight (quieter than the feed lines above, still legible)
+       since it's a caveat, not a legend key entry. */
+    .legend-note{display:inline-block;margin-top:.4rem;color:var(--ink-3);font-size:.62rem;line-height:1.5}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -126,7 +171,17 @@
     /* the event dossier stacks ABOVE the county dossier when you drill from county -> event */
     aside#panel{z-index:7}
     aside#county-panel{z-index:6}
+    /* Truncation honesty (item 3a, locked copy) — only ever has text when the 500-row cap actually
+       truncated the list; empty otherwise, and :empty hides it rather than leaving a blank gap. */
+    .c-note{margin:.3rem 1.4rem 0;font-family:var(--font-mono);font-size:.64rem;color:var(--ink-4);line-height:1.4}
+    .c-note:empty{display:none}
     .clist{padding:1rem 1.4rem 1.4rem;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem}
+    /* Per-feed extent honesty (item 3c) — static for A1 (see the TODO on the markup below);
+       margin-top:auto mirrors .src's own bottom-stick trick on the event dossier so a short event
+       list doesn't leave this floating mid-panel. */
+    .c-coverage{padding:.8rem 1.4rem 1.1rem;border-top:1px solid var(--line);margin-top:auto}
+    .c-coverage p{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-4);line-height:1.5;margin:.3rem 0 0}
+    .c-coverage p:first-child{margin-top:0}
     .crow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.55rem .7rem;
       border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--row-bg)}
     .crow:hover{border-color:var(--line-2);background:var(--row-bg-hover)}
@@ -249,14 +304,23 @@
   <div id="map"></div>
   <header>
     <a class="home" href="index.html" title="Back to home"><span class="dia"></span><span class="wm">Vestige</span></a>
-    <span class="sub">western North Carolina &middot; earthquakes &middot; cyclone tracks &middot; county storm impacts</span>
+    <span class="sub">United States &middot; county storm impacts (nationwide) &middot; earthquakes &amp; storm tracks (selected regions &amp; storms only)</span>
+    <div class="search-wrap">
+      <input id="search-input" class="search-input" type="text" placeholder="Search a U.S. county&hellip;"
+        autocomplete="off" aria-label="Search for a county" role="combobox" aria-expanded="false"
+        aria-controls="search-results" />
+      <div id="search-results" class="search-results" role="listbox"></div>
+    </div>
   </header>
   <div class="legend">
     <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
-    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS) &middot; Helene, 2024<br>
-    <span class="cty"></span><b class="cy">County impact</b> (NOAA Storm Events)<br>
+    <span class="ln"></span><b class="ct">Storm tracks</b> (IBTrACS)<br>
+    <span class="cty"></span><b class="cy">County storm impacts</b> (NOAA Storm Events)<br>
+    <span class="legend-note">Storm events: United States. Territory events appear as recorded points;
+      territory place dossiers are not yet available.</span><br>
     click any event
   </div>
+  <div id="honest-toast" class="honest-toast" role="status"></div>
 
   <button id="theme-pill" class="theme-pill" type="button" aria-label="Toggle light/dark theme">
     <span class="tp-dark">☾ dark</span><span class="tp-light">☀ light</span>
@@ -317,7 +381,16 @@
     </div>
     <div class="mag" id="c-name"></div>
     <div class="summary" id="c-count"></div>
+    <p class="c-note" id="c-note"></p>
     <div class="clist" id="c-list"></div>
+    <!-- Static per Task 10 item 3c: earthquakes + storm tracks aren't nationally complete yet, so
+         their true extent can't be claimed here. TODO(live-fetch milestone): drive these two lines
+         from /api/coverage's feed extents once the county dossier fetch path is wired to that
+         endpoint (see api/main.py's /api/coverage — feeds[].spatial extent) instead of hardcoding. -->
+    <div class="c-coverage">
+      <p>Earthquakes: selected regions only.</p>
+      <p>Storm tracks: selected storms only.</p>
+    </div>
   </aside>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="vestigeLibLoaded()" onerror="vestigeMapLoadFailed()"></script>
@@ -454,11 +527,16 @@
     const tilesArchive = new pmtiles.PMTiles(TILES_URL);
     protocol.add(tilesArchive);
 
+    // Continental-US initial view (Task 10 item 5 — was WNC-centered at zoom 6.3, a stale leftover
+    // from the single-region skeleton). A conventional CONUS-fit center/zoom; territories (PR, etc.)
+    // sit outside this initial frame but are never hidden from the data — see the legend's territory
+    // copy and setSelectedCounty/openPlace, which work identically for any place_id regardless of
+    // whether it's in the initial viewport.
     const map = new maplibregl.Map({
       container: "map",
       style: MAP_THEME[currentTheme].style,
-      center: [-82.3, 35.85],
-      zoom: 6.3,
+      center: [-98.35, 39.5],
+      zoom: 3.6,
       attributionControl: { compact: true }
     });
     window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
@@ -661,13 +739,18 @@
         map.setFeatureState({ source: "tiles", sourceLayer: "counties", id }, { hover: true });
       });
       map.on("mouseleave", "counties-hit", clearCountyHover);
-      // Empty-basemap click closes the filter panel; feature clicks (handled above) leave it alone.
-      // Guard the layer list through getLayer() — mid-theme-swap, setStyle() briefly wipes layers,
-      // and queryRenderedFeatures throws on an unknown layer id in some MapLibre versions.
+      // Empty-basemap click closes the filter panel (and any open search results — closeSearchResults
+      // is defined further down but hoisted within this same function scope); feature clicks
+      // (handled above) leave both alone. Guard the layer list through getLayer() — mid-theme-swap,
+      // setStyle() briefly wipes layers, and queryRenderedFeatures throws on an unknown layer id in
+      // some MapLibre versions.
       map.on("click", (e) => {
         const interactive = ["quakes", "tracks", "counties-hit"].filter((id) => map.getLayer(id));
         const hit = interactive.length ? map.queryRenderedFeatures(e.point, { layers: interactive }) : [];
-        if (hit.length === 0) $("filter-panel").classList.remove("open");
+        if (hit.length === 0) {
+          $("filter-panel").classList.remove("open");
+          closeSearchResults();
+        }
       });
 
       // Honest loading pill, now keyed off the "tiles" vector source's own load/error events
@@ -691,6 +774,8 @@
         if (ok) {
           initFilterUI();
           loadPill.style.display = "none";
+          tilesReady = true;
+          tilesReadyQueue.splice(0).forEach((cb) => cb());
         } else {
           console.error("failed to load tile source", err);
           // Honesty contract: this copy is exact, do not reword — absence of data must never read
@@ -761,6 +846,18 @@
     let selectedHazards = new Set();
     let timeFrom = null, timeTo = null;
     let minYear, maxYear;
+
+    // Flips true once the tile source has actually delivered data (settleTilesSource(true) below) —
+    // queued callbacks (search selection, deep links) run their flyTo/fitBounds only once there's a
+    // real chance the target county's tile is loaded, rather than racing map init. If tiles never
+    // settle (archive unreachable), queued callbacks simply never fire — no fabricated camera move,
+    // and openPlace() still opens the correct dossier independent of this (see goToPlace below).
+    let tilesReady = false;
+    let tilesReadyQueue = [];
+    function onTilesReady(cb) {
+      if (tilesReady) cb();
+      else tilesReadyQueue.push(cb);
+    }
 
     // Builds the filter pill + panel. Hazard chips and year bounds come from aggregates.json (the
     // bake-time national artifact — see AGGREGATES_URL/aggregatesPromise above), NOT from the tile
@@ -971,16 +1068,23 @@
 
     // A county click opens a place dossier: the county + the list of events recorded there. Each
     // list row drills into that event's own dossier (which stacks above this panel).
+    // Returns true/false (success), so deep-link/search callers can react honestly to a bad
+    // place_id (e.g. a stale/mistyped ?place= URL) instead of silently no-oping — see goToPlace and
+    // handleUrlParams below. Existing callers (map click) ignore the return value; unchanged for them.
     async function openPlace(placeId) {
       try {
-        const place = await (await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId))).json();
+        const res = await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId));
+        if (!res.ok) throw new Error("place fetch failed: " + res.status);
+        const place = await res.json();
         showCountyDossier(place);
         // The amber attribution fill lights up ONLY this county now that its dossier is open — set
         // after the fetch succeeds (not optimistically on click) so a failed fetch never highlights
         // a county whose dossier never actually opened.
         setSelectedCounty(placeId);
+        return true;
       } catch (err) {
         console.error("failed to load place", placeId, err);
+        return false;
       }
     }
     window.openPlace = openPlace;
@@ -992,13 +1096,219 @@
     $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); setSelectedCounty(null); };
     $("theme-pill").onclick = () => setTheme(currentTheme === "light" ? "dark" : "light");
 
-    // Escape closes exactly the topmost open panel, one per keypress: event dossier (z-index 7)
-    // first, then county dossier (z-index 6), then the filter panel. Deliberately does NOT reuse
-    // #cclose's handler — that closes both dossiers at once, but Escape on the county panel alone
-    // must close only the county panel (the event panel, if any, is already gone by then).
+    // --- Honest no-match / no-op toast (Task 10 item 2) — reused by deep links below. Click-to-
+    // dismiss, plus a generous auto-hide; never silently disappears the very first frame. ---
+    let honestToastTimer = null;
+    function showHonestToast(msg) {
+      const el = $("honest-toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(honestToastTimer);
+      honestToastTimer = setTimeout(() => el.classList.remove("show"), 8000);
+    }
+    $("honest-toast").onclick = () => $("honest-toast").classList.remove("show");
+
+    // --- Search control (Task 10 item 1) ---
+    let searchDebounceTimer = null;
+    let searchResults = [];
+    let searchActiveIndex = -1;
+
+    function closeSearchResults() {
+      const el = $("search-results");
+      el.innerHTML = "";
+      el.classList.remove("open");
+      $("search-input").setAttribute("aria-expanded", "false");
+      searchResults = [];
+      searchActiveIndex = -1;
+    }
+
+    function updateSearchActive() {
+      $("search-results").querySelectorAll(".sresult").forEach((el, i) => {
+        el.classList.toggle("active", i === searchActiveIndex);
+      });
+    }
+
+    function selectSearchResult(idx) {
+      const m = searchResults[idx];
+      if (!m) return;
+      $("search-input").value = m.name + (m.state ? ", " + m.state : "");
+      closeSearchResults();
+      goToPlace(m.place_id);
+    }
+
+    function renderSearchResults(matches) {
+      searchResults = matches;
+      searchActiveIndex = -1;
+      const el = $("search-results");
+      el.innerHTML = matches.length
+        ? matches.map((m, i) =>
+            `<div class="sresult" data-idx="${i}" role="option">${m.name}${m.state ? ", " + m.state : ""}</div>`
+          ).join("")
+        : '<div class="sresult-empty">No matches</div>';
+      el.querySelectorAll(".sresult").forEach((row) => {
+        row.onclick = () => selectSearchResult(Number(row.dataset.idx));
+      });
+      el.classList.add("open");
+      $("search-input").setAttribute("aria-expanded", "true");
+    }
+
+    // Shared by the search box (runSearch) and the ?q= deep link (handleUrlParams) — checks
+    // res.ok so a malformed/error response (e.g. a 404 with an unrelated JSON body) throws into the
+    // caller's catch instead of silently degrading into "0 matches" (data.matches would just be
+    // undefined -> [] otherwise, indistinguishable from a genuine no-match).
+    async function placeLookup(q) {
+      const res = await fetch(API_BASE + "/api/place-lookup?q=" + encodeURIComponent(q));
+      if (!res.ok) throw new Error("place-lookup failed: " + res.status);
+      const data = await res.json();
+      return Array.isArray(data.matches) ? data.matches : [];
+    }
+
+    async function runSearch(q) {
+      q = q.trim();
+      if (q.length < 2) { closeSearchResults(); return; }
+      try {
+        renderSearchResults(await placeLookup(q));
+      } catch (err) {
+        console.error("place-lookup failed", err);
+        closeSearchResults();
+      }
+    }
+
+    $("search-input").addEventListener("input", (e) => {
+      clearTimeout(searchDebounceTimer);
+      const val = e.target.value;
+      // Under 2 chars: close any stale list and skip the network entirely — no request under 2
+      // chars (item 1), and the debounce below only ever gates the FETCH, not this floor.
+      if (val.trim().length < 2) { closeSearchResults(); return; }
+      // ≥250ms debounce (design-lock, item 1); 280ms gives comfortable margin over the floor.
+      searchDebounceTimer = setTimeout(() => runSearch(val), 280);
+    });
+
+    // Arrow/Enter navigation only — Escape is deliberately handled centrally below (the search
+    // results list is the TOPMOST layer of the Esc-stack when open; see the keydown listener).
+    $("search-input").addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        searchActiveIndex = Math.min(searchActiveIndex + 1, searchResults.length - 1);
+        updateSearchActive();
+      } else if (e.key === "ArrowUp") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        searchActiveIndex = Math.max(searchActiveIndex - 1, 0);
+        updateSearchActive();
+      } else if (e.key === "Enter") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        selectSearchResult(searchActiveIndex >= 0 ? searchActiveIndex : 0);
+      }
+    });
+
+    // Click-away: dismiss the results list on any click outside the search control (mirrors the
+    // map's own "empty-basemap click closes the filter panel" behavior below).
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".search-wrap")) closeSearchResults();
+    });
+
+    // Sums a GeoJSON Polygon/MultiPolygon's coordinate extent — a manual walk (not
+    // Math.min/max(...spread)) because a county's ring can carry thousands of points and a spread
+    // that large risks "Maximum call stack size exceeded" in some engines.
+    function geometryBounds(geom) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      (function walk(a) {
+        if (typeof a[0] === "number") {
+          if (a[0] < minLng) minLng = a[0];
+          if (a[0] > maxLng) maxLng = a[0];
+          if (a[1] < minLat) minLat = a[1];
+          if (a[1] > maxLat) maxLat = a[1];
+          return;
+        }
+        a.forEach(walk);
+      })(geom.coordinates);
+      return [[minLng, minLat], [maxLng, maxLat]];
+    }
+
+    // /api/place/{id} does NOT carry geometry (api/main.py's _PLACE_ONE selects only place_id/kind/
+    // name/state) — the only geometry available client-side is the county polygon already baked
+    // into the "counties" tile source-layer. querySourceFeatures only sees features from tiles
+    // MapLibre has already loaded for the CURRENT viewport/zoom; since the app's initial view is
+    // now national (continental-US center/zoom, item 5), most counties' tiles are already resident
+    // by the time a search fires. If the target county's tile genuinely isn't loaded (e.g. the user
+    // has zoomed into one region and searches for a county far outside it), this honestly returns
+    // false and the caller just opens the dossier without a camera move — never a fabricated or
+    // wrong-place flyTo.
+    function flyToPlaceIfKnown(placeId) {
+      if (!map.getSource("tiles")) return false;
+      const feats = map.querySourceFeatures("tiles", {
+        sourceLayer: "counties",
+        filter: ["==", ["get", "place_id"], placeId]
+      });
+      const feat = feats.find((f) => f.geometry);
+      if (!feat) return false;
+      try {
+        map.fitBounds(geometryBounds(feat.geometry), { padding: 80, duration: 1000, maxZoom: 9 });
+        return true;
+      } catch (err) {
+        console.error("fitBounds failed for", placeId, err);
+        return false;
+      }
+    }
+
+    // The shared "select a place" entry point for search selection and deep links: fly (best-
+    // effort, see flyToPlaceIfKnown) + open its dossier. Queuing the fly via onTilesReady means a
+    // very early selection (before the tile source has delivered anything) still gets its camera
+    // move once tiles are ready, rather than just silently skipping it.
+    async function goToPlace(placeId) {
+      onTilesReady(() => flyToPlaceIfKnown(placeId));
+      return openPlace(placeId);
+    }
+
+    // --- URL deep links (Task 10 item 2): ?place=county:XXXXX opens that dossier directly;
+    // ?q=text runs the lookup and opens the single match, or shows the results list prefilled for
+    // multiple matches. No match, either param: an honest toast, never a silent no-op. ---
+    async function handleUrlParams() {
+      const params = new URLSearchParams(location.search);
+      const placeParam = params.get("place");
+      const qParam = params.get("q");
+      if (placeParam) {
+        const ok = await goToPlace(placeParam);
+        if (!ok) {
+          showHonestToast("No county matched '" + placeParam + "' — try your county's name.");
+        }
+        return;
+      }
+      if (qParam !== null) {
+        const q = qParam.trim();
+        $("search-input").value = q;
+        if (q.length < 2) return;  // mirrors the API's own 2-char floor — nothing honest to say yet
+        try {
+          const matches = await placeLookup(q);
+          if (matches.length === 1) {
+            await goToPlace(matches[0].place_id);
+          } else if (matches.length > 1) {
+            renderSearchResults(matches);
+          } else {
+            showHonestToast("No county matched '" + q + "' — try your county's name.");
+          }
+        } catch (err) {
+          console.error("deep-link place-lookup failed", err);
+          showHonestToast("Search is unavailable right now — try again shortly.");
+        }
+      }
+    }
+
+    // Escape closes exactly the topmost open layer, one per keypress: the honest toast and search
+    // results (both can float above everything) first, then the event dossier (z-index 7), then the
+    // county dossier (z-index 6), then the filter panel. Deliberately does NOT reuse #cclose's
+    // handler — that closes both dossiers at once, but Escape on the county panel alone must close
+    // only the county panel (the event panel, if any, is already gone by then).
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      if (panel.classList.contains("open")) {
+      if ($("honest-toast").classList.contains("show")) {
+        $("honest-toast").classList.remove("show");
+      } else if ($("search-results").classList.contains("open")) {
+        closeSearchResults();
+      } else if (panel.classList.contains("open")) {
         panel.classList.remove("open");
       } else if (countyPanel.classList.contains("open")) {
         countyPanel.classList.remove("open");
@@ -1008,14 +1318,31 @@
       }
     });
 
+    handleUrlParams();
+
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
     function showCountyDossier(place) {
       $("c-name").textContent = place.name + (place.state ? ", " + place.state : "");
-      const n = place.event_count;
-      $("c-count").textContent = n + " recorded " + (n === 1 ? "event" : "events") +
-        " — click one for its dossier";
-      $("c-list").innerHTML = (place.events || []).map((e) => {
+      // total_events is the true (uncapped) count; event_count is the same value (API contract —
+      // see api/main.py's /api/place/{id}) kept only as a defensive fallback.
+      const total = typeof place.total_events === "number" ? place.total_events : (place.event_count || 0);
+      const events = place.events || [];
+      if (total === 0) {
+        // Locked honesty copy (Task 10 item 3b) — verbatim, do not reword.
+        $("c-count").textContent = "No events attached to this county in our data since 1996. " +
+          "Absence of a record is not absence of hazard.";
+        $("c-note").textContent = "";
+      } else {
+        $("c-count").textContent = total.toLocaleString() + " recorded " +
+          (total === 1 ? "event" : "events") + " — click one for its dossier";
+        // Locked honesty copy (Task 10 item 3a) — verbatim, do not reword. Only ever shown when the
+        // dossier's 500-row cap actually truncated what's listed below.
+        $("c-note").textContent = (total > events.length)
+          ? "showing the most recent 500 of " + total.toLocaleString() + " recorded events"
+          : "";
+      }
+      $("c-list").innerHTML = events.map((e) => {
         const type = (e.hazard_type || "event").replace(/_/g, " ");
         const date = (e.time || "").slice(0, 10);
         const flag = truthy(e, "impact_source_present") ? '<span class="cflag">impact ✓</span>' : "";
