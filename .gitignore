@@ -6,3 +6,6 @@ site/
 .env
 .env.*
 *.log
+*.pmtiles
+aggregates.json
+.superpowers/

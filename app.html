@@ -3,12 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vestige — hazard atlas · earthquakes · cyclones · wildfires · county storm impacts</title>
+  <title>Vestige — county storm impacts, earthquakes &amp; storm tracks</title>
   <script>
     // Resolve + apply the theme BEFORE the stylesheet below paints, so there's no flash of the
     // wrong theme. localStorage wins over OS preference; dark is the no-preference default.
     // Shared with index.html and sources.html via localStorage["vestige-theme"].
-    // Deliberately does not touch maplibregl — this must run long before that script loads.
     (function () {
       var t;
       try { t = localStorage.getItem("vestige-theme"); } catch (e) { t = null; }
@@ -31,6 +30,18 @@
         pill.textContent = "map failed to load — no events are being shown.";
         pill.classList.add("error");
       }
+    };
+    // initVestigeMap() now needs TWO independently-deferred library scripts (MapLibre + pmtiles,
+    // below) to have both finished loading before it can touch either global. Each script's onload
+    // calls this counter instead of initVestigeMap() directly; only the second call actually starts
+    // the map, so it never matters which of the two finishes first. A failure in EITHER script is
+    // the same "map failed to load" case as a MapLibre-only failure was before — reuses
+    // vestigeMapLoadFailed as-is (still touches only static DOM), and deliberately never lets the
+    // counter reach 2 afterward so initVestigeMap can't still fire on a partial load.
+    window._vestigeLibsLoaded = 0;
+    window.vestigeLibLoaded = function () {
+      window._vestigeLibsLoaded += 1;
+      if (window._vestigeLibsLoaded === 2) initVestigeMap();
     };
   </script>
   <!-- Preconnect: warm the connections these three origins will need almost immediately
@@ -89,6 +100,47 @@
     .home{display:inline-flex;align-items:center;gap:.7rem;pointer-events:auto;color:inherit;text-decoration:none}
     .wm{font-weight:600;letter-spacing:.32em;font-size:.78rem;text-transform:uppercase}
     header .sub{font-family:var(--font-mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.04em}
+    /* Search: sits inline in the header flow (after the strapline), NOT absolutely positioned like
+       the theme/filter pills — it needs its own pointer-events:auto since header itself is
+       pointer-events:none (see .home above for the same pattern). Capped width so it never reaches
+       under the top-right pills at normal viewport widths; the narrow-viewport media query below
+       hides the strapline and shrinks this further so the two never collide down to phone widths. */
+    .search-wrap{position:relative;pointer-events:auto;flex:1 1 auto;max-width:22rem;min-width:8rem;margin-left:.4rem}
+    .search-input{
+      width:100%;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.02em;
+      background:var(--glass);border:1px solid var(--line);color:var(--ink);
+      border-radius:999px;padding:.42rem .9rem;outline:none;
+    }
+    .search-input::placeholder{color:var(--ink-4)}
+    .search-input:focus{border-color:var(--line-2)}
+    /* The topmost layer of the Esc-stack when open (z-index 8, above the event dossier's 7) — see
+       the app's Escape handler: search results close first, before either dossier or the filter
+       panel. */
+    .search-results{
+      position:absolute;top:calc(100% + .4rem);left:0;right:0;z-index:8;
+      background:var(--glass-3);border:1px solid var(--line);border-radius:10px;
+      backdrop-filter:blur(8px);overflow-y:auto;max-height:60vh;display:none;
+    }
+    .search-results.open{display:block}
+    .sresult{padding:.55rem .85rem;font-size:.82rem;cursor:pointer;border-top:1px solid var(--line)}
+    .sresult:first-child{border-top:0}
+    .sresult:hover,.sresult.active{background:var(--row-bg-hover)}
+    .sresult-empty{padding:.6rem .85rem;font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3)}
+    @media (max-width:640px){
+      header .sub{display:none}
+      .search-wrap{max-width:11rem;margin-left:0}
+    }
+    /* Honest-failure/no-match toast — same visual language as .load-pill, but dismissable and
+       reused for anything that must never silently no-op (see item 2, "?q=" / "?place=" deep
+       links with no match). z-index above the search results dropdown: it can appear WHILE a
+       dropdown is open (a bad ?q= deep link on load, for instance). */
+    .honest-toast{
+      position:absolute;top:4.4rem;left:50%;transform:translateX(-50%);z-index:9;
+      max-width:min(90vw,26rem);background:var(--glass-2);border:1px solid var(--line);
+      color:var(--ink-2);border-radius:10px;padding:.6rem .9rem;font-size:.8rem;line-height:1.4;
+      text-align:center;backdrop-filter:blur(8px);display:none;cursor:pointer;
+    }
+    .honest-toast.show{display:block}
 
     .legend{
       position:absolute;left:1rem;bottom:1rem;z-index:5;font-family:var(--font-mono);font-size:.68rem;
@@ -104,9 +156,10 @@
     .legend .cy{color:var(--beacon)}
     .legend .cty{display:inline-block;width:13px;height:9px;border:1px dashed var(--beacon);
       background:var(--beacon-tint);margin-right:.4rem;vertical-align:middle}
-    .legend .fi{color:var(--fire)}
-    .legend .fr{display:inline-block;width:13px;height:9px;border:1px dashed var(--fire);
-      background:rgba(255,93,56,.12);margin-right:.4rem;vertical-align:middle}
+    /* Drew ruling 2026-07-08 (Task 10 item 3, territory copy) — verbatim text lives in the markup,
+       this just gives it its own visual weight (quieter than the feed lines above, still legible)
+       since it's a caveat, not a legend key entry. */
+    .legend-note{display:inline-block;margin-top:.4rem;color:var(--ink-3);font-size:.62rem;line-height:1.5}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -118,7 +171,17 @@
     /* the event dossier stacks ABOVE the county dossier when you drill from county -> event */
     aside#panel{z-index:7}
     aside#county-panel{z-index:6}
+    /* Truncation honesty (item 3a, locked copy) — only ever has text when the 500-row cap actually
+       truncated the list; empty otherwise, and :empty hides it rather than leaving a blank gap. */
+    .c-note{margin:.3rem 1.4rem 0;font-family:var(--font-mono);font-size:.64rem;color:var(--ink-4);line-height:1.4}
+    .c-note:empty{display:none}
     .clist{padding:1rem 1.4rem 1.4rem;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem}
+    /* Per-feed extent honesty (item 3c) — static for A1 (see the TODO on the markup below);
+       margin-top:auto mirrors .src's own bottom-stick trick on the event dossier so a short event
+       list doesn't leave this floating mid-panel. */
+    .c-coverage{padding:.8rem 1.4rem 1.1rem;border-top:1px solid var(--line);margin-top:auto}
+    .c-coverage p{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-4);line-height:1.5;margin:.3rem 0 0}
+    .c-coverage p:first-child{margin-top:0}
     .crow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.55rem .7rem;
       border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--row-bg)}
     .crow:hover{border-color:var(--line-2);background:var(--row-bg-hover)}
@@ -222,9 +285,16 @@
       font-size:.62rem;cursor:pointer;padding:0}
     .fempty{margin:0;padding:.6rem .85rem;font-family:var(--font-mono);font-size:.62rem;
       color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);display:none}
-    /* Quiet status pill: visible from first paint ("loading records…"), hidden once both fetches
-       in map.on("load") resolve. On an /api/events failure it stays up with honest failure copy —
-       absence of data must never read as absence of events. If the map itself never loads (script
+    /* The locked honesty footnote — only ever shown alongside the count line (fcount-text), never
+       on its own; see updateCount(). Deliberately no border-top: it reads as a continuation of the
+       count line above it, not a new section (filter-empty, below, keeps its own border-top and
+       supplies the section break when both are visible). */
+    .ffoot{margin:0;padding:0 .85rem .6rem;font-family:var(--font-mono);font-size:.58rem;
+      color:var(--ink-4);line-height:1.4;display:none}
+    /* Quiet status pill: visible from first paint ("loading records…"), hidden once the pmtiles
+       vector source reports loaded inside map.on("load"). If the tile archive is genuinely
+       unreachable it stays up with honest failure copy — absence of data must never read as
+       absence of events (see settleTilesSource below). If the map itself never loads (script
        blocked, initial style/tile fetch failing) a separate failure copy takes over instead — see
        window.vestigeMapLoadFailed in <head> and the map's own initial "error" handling below.
        Built only from existing glass vars so both themes work automatically. */
@@ -251,15 +321,24 @@
   <div id="map"></div>
   <header>
     <a class="home" href="index.html" title="Back to home"><span class="dia"></span><span class="wm">Vestige</span></a>
-    <span class="sub">six regions &middot; earthquakes &middot; cyclone tracks &middot; wildfires &middot; county storm impacts</span>
+    <span class="sub">United States &middot; county storm impacts (nationwide) &middot; earthquakes &amp; storm tracks (selected regions &amp; storms only)</span>
+    <div class="search-wrap">
+      <input id="search-input" class="search-input" type="text" placeholder="Search a U.S. county&hellip;"
+        autocomplete="off" aria-label="Search for a county" role="combobox" aria-expanded="false"
+        aria-controls="search-results" />
+      <div id="search-results" class="search-results" role="listbox"></div>
+    </div>
   </header>
   <div class="legend">
     <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
-    <span class="ln"></span><b class="ct">Cyclone track</b> (IBTrACS)<br>
-    <span class="cty"></span><b class="cy">County storm impact</b> (NOAA)<br>
-    <span class="fr"></span><b class="fi">Wildfire</b> (NOAA) &middot; county-attributed<br>
+    <span class="ln"></span><b class="ct">Storm tracks</b> (IBTrACS)<br>
+    <span class="cty"></span><b class="cy">County storm impacts</b> (NOAA Storm Events)<br>
+    <!-- LOCKED copy, byte-exact — kept on one source line so textContent carries no stray
+         whitespace/newlines from HTML formatting. -->
+    <span class="legend-note">Storm events: United States. Territory events appear as recorded points; territory place dossiers are not yet available.</span><br>
     click any event
   </div>
+  <div id="honest-toast" class="honest-toast" role="status"></div>
 
   <button id="theme-pill" class="theme-pill" type="button" aria-label="Toggle light/dark theme">
     <span class="tp-dark">☾ dark</span><span class="tp-light">☀ light</span>
@@ -270,7 +349,7 @@
       <div class="flabel">Hazard type</div>
       <div id="filter-chips"></div>
     </div>
-    <div class="fsec">
+    <div class="fsec" id="time-fsec">
       <div class="flabel">Time range</div>
       <div class="frange">
         <label>From <span id="from-val"></span></label>
@@ -280,9 +359,10 @@
       </div>
     </div>
     <div class="fcount">
-      <span><b id="filter-shown"></b> of <span id="filter-total"></span> events match</span>
+      <span id="fcount-text"></span>
       <button id="filter-reset" class="reset" type="button">reset</button>
     </div>
+    <p id="filter-footnote" class="ffoot">as recorded; the map may show fewer at this zoom or where events couldn't be matched to a county boundary.</p>
     <p id="filter-empty" class="fempty">No recorded events match this filter — that may be a gap in what's been catalogued, not evidence nothing happened here.</p>
   </div>
 
@@ -324,16 +404,114 @@
     </div>
     <div class="mag" id="c-name"></div>
     <div class="summary" id="c-count"></div>
+    <p class="c-note" id="c-note"></p>
     <div class="clist" id="c-list"></div>
+    <!-- Per-feed extent honesty, static for A1; every string here is LOCKED copy, byte-exact — do
+         not reword, re-punctuate, or split across source lines (textContent must match exactly).
+         TODO(live-fetch milestone): drive the earthquake/storm-track lines from /api/coverage's
+         feed extents once the county dossier fetch path is wired to that endpoint (see
+         api/main.py's /api/coverage — feeds[].spatial extent) instead of hardcoding. -->
+    <div class="c-coverage">
+      <p>Storm events: United States. Territory events appear as recorded points; territory place dossiers are not yet available.</p>
+      <p>Earthquakes: selected regions only</p>
+      <p>Storm tracks: selected storms only</p>
+    </div>
   </aside>
 
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="initVestigeMap()" onerror="vestigeMapLoadFailed()"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer onload="vestigeLibLoaded()" onerror="vestigeMapLoadFailed()"></script>
+  <!-- pmtiles: reads the .pmtiles archive directly over HTTP range requests (no tile server). Pinned
+       to 4.4.1 (current stable; its 3.0.1+ line documents MapLibre GL v4.x support, which is what
+       this app runs) and loaded with the same defer + onload/onerror pattern as MapLibre above, so a
+       CDN hiccup on either script is caught by the same honest-failure path. -->
+  <script src="https://unpkg.com/pmtiles@4.4.1/dist/pmtiles.js" defer onload="vestigeLibLoaded()" onerror="vestigeMapLoadFailed()"></script>
   <script>
     function initVestigeMap() {
     // Vestige read API (separate deploy): localhost in dev, the deployed Cloud Run URL in prod.
     const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
       ? "http://localhost:8000"
       : "https://vestige-api-mm24ltq7ja-uc.a.run.app";
+    // The pre-baked tile archive (events + counties, one file). Dev: served next to app.html by
+    // whatever static server is hosting this page. Prod: same-origin path under the bucket that
+    // hosts the web app itself — there is no separate tiles deploy the way API_BASE is a separate
+    // service, so this is a path, not a different hostname.
+    const TILES_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+      ? "vestige.pmtiles"
+      : "/tiles/vestige.pmtiles";
+    // The bake-time aggregates artifact — same origin as the tile archive (same hostname-switch
+    // pattern as TILES_URL above; dev is a plain relative path served next to app.html, prod sits
+    // alongside the tiles under the app's own bucket). Real, exact, pre-computed national totals —
+    // total_events, per-hazard-class counts, year_min/year_max — the ONLY source honest enough to
+    // drive the filter panel's chip list, year bounds, and count line now that the tile source
+    // itself can't (see initFilterUI/updateCount below for why).
+    const AGGREGATES_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+      ? "aggregates.json"
+      : "/tiles/aggregates.json";
+    // The known national hazard_class taxonomy (14 classes crosswalked from NWS Directive 10-1605's
+    // 48 official Storm Data event types in etl/importers/storm_events.py's HAZARD_CROSSWALK, plus
+    // "earthquake" from etl/importers/usgs.py and the crosswalk's own "other" fallback) — used ONLY
+    // as the chip list when aggregates.json fails to load. Deliberately the FULL known taxonomy, not
+    // just whatever classes the last-seen aggregates.json happened to have nonzero counts for (e.g.
+    // "volcanic" has zero ingested events nationally as of A1 and so never appears as a key in
+    // by_hazard_class) — a fallback chip list that offers a real, known hazard type is honest even
+    // with no count attached; a chip list that silently shrank because of a fetch failure would not
+    // be.
+    const HAZARD_CLASSES_FALLBACK = [
+      "coastal", "cold", "cyclone", "drought", "earthquake", "fire", "flood", "heat", "landslide",
+      "obscuration", "other", "severe_thunderstorm", "tornado", "volcanic", "wind", "winter"
+    ];
+    // Fetched once, immediately, in parallel with everything else below — never gated on the map or
+    // tile source. Resolves to the parsed aggregates object, or null on any failure (bad status,
+    // network error, unparseable body, valid-JSON-but-wrong-shape, or a hung response — see the
+    // shape check and timeout below). initFilterUI() awaits this; nothing else should — read
+    // `aggregates` (set once this settles) instead of re-awaiting the promise.
+    let aggregates = null;
+    let aggregatesFetchSettled = false;
+    const aggregatesPromise = Promise.race([
+      fetch(AGGREGATES_URL)
+        .then((r) => {
+          if (!r.ok) throw new Error("aggregates.json fetch failed: " + r.status);
+          return r.json();
+        })
+        .then((data) => {
+          // Shape validation — the same discipline the old /api/events fetch had: any truthy JSON
+          // body is NOT an aggregates artifact. A misconfigured host returning e.g. {"error": "..."}
+          // as 200 would otherwise flow into updateCount() and render "undefined of undefined
+          // events match" — a silently fabricated count line, the exact class of lie the honesty
+          // contract forbids. Valid JSON with the wrong shape must fail exactly like a rejected
+          // fetch: throw into the catch below → null → the already-honest hidden/fallback state.
+          if (!data || typeof data.total_events !== "number" ||
+              !data.by_hazard_class || typeof data.by_hazard_class !== "object" ||
+              typeof data.year_min !== "number" || typeof data.year_max !== "number") {
+            throw new Error("aggregates.json has an unexpected shape — refusing to use it");
+          }
+          aggregatesFetchSettled = true;
+          aggregates = data;
+          return data;
+        })
+        .catch((err) => {
+          aggregatesFetchSettled = true;
+          console.error("failed to load aggregates.json — chips fall back to the known-classes " +
+            "constant, count line stays hidden", err);
+          return null;
+        }),
+      // A hung response (server accepts the connection but never finishes the body) would leave
+      // this promise pending forever — and initFilterUI() awaits it BEFORE wiring the filter
+      // pill's onclick, so the pill would sit visible but permanently dead. 15s cap, symmetric
+      // with the tile source's own 15s settle guarantee; resolves null = the same honest fallback
+      // state as any other aggregates failure. The settled flag keeps the loser-timer honest: on
+      // any load where the fetch already settled (success OR failure), the timer must be a silent
+      // no-op — logging "timed out" on a healthy load would be its own small lie. (If the fetch
+      // wins its own race with the network only after this timeout fired, its .then still sets
+      // `aggregates` — harmless: updateCount() reads it live and simply starts showing real counts
+      // on the next filter interaction; nothing re-renders a stale lie in the meantime.)
+      new Promise((resolve) => setTimeout(() => {
+        if (!aggregatesFetchSettled) {
+          console.error("aggregates.json fetch timed out after 15s — chips fall back to the " +
+            "known-classes constant, count line stays hidden");
+        }
+        resolve(null);
+      }, 15000))
+    ]);
 
     // MapLibre paint values are JS, not CSS — this object drives both basemaps' layer paint.
     // Kept in sync with the CSS token pairs above (dark literals match the :root values; light
@@ -354,21 +532,36 @@
         quakeStroke: "rgba(94,62,10,.45)"
       }
     };
-    const EMPTY_FC = { type: "FeatureCollection", features: [] };
-
     // The <head> script already resolved + applied localStorage/OS preference before first paint;
     // read it back here so the map's initial style and the CSS chrome agree from frame one.
     let currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-    let fc = EMPTY_FC, places = EMPTY_FC;
     // Blocks the toggle both before the very first load completes (sources/layers don't exist yet)
     // and while a setStyle()'s style.load is still pending (guards rapid double-toggles).
     let themeSwitchPending = true;
+    // Which county's dossier is currently open, if any — drives the amber "selected" fill (see
+    // setSelectedCounty below). Survives a theme toggle (re-applied after setStyle) the same way
+    // the hazard/time filters do; only explicitly closing the dossier clears it.
+    let selectedPlaceId = null;
 
+    // Register the pmtiles:// protocol once, globally, before any addSource() references it. A
+    // single PMTiles instance is registered with the protocol (protocol.add) so MapLibre's own tile
+    // requests and our own getMetadata() call below (used to build the filter panel — see
+    // initFilterUI) share one cached archive header instead of fetching it twice.
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+    const tilesArchive = new pmtiles.PMTiles(TILES_URL);
+    protocol.add(tilesArchive);
+
+    // Continental-US initial view (Task 10 item 5 — was WNC-centered at zoom 6.3, a stale leftover
+    // from the single-region skeleton). A conventional CONUS-fit center/zoom; territories (PR, etc.)
+    // sit outside this initial frame but are never hidden from the data — see the legend's territory
+    // copy and setSelectedCounty/openPlace, which work identically for any place_id regardless of
+    // whether it's in the initial viewport.
     const map = new maplibregl.Map({
       container: "map",
       style: MAP_THEME[currentTheme].style,
-      center: [-82.3, 35.85],
-      zoom: 6.3,
+      center: [-98.35, 39.5],
+      zoom: 3.6,
       attributionControl: { compact: true }
     });
     window.map = map;  // exposed for console/debugging + programmatic deep-linking to an event
@@ -394,33 +587,53 @@
       // recovery toggle's own "style.load" listener can end up queued behind it. Both then fire on
       // the SAME style load: the stale one runs this function first and succeeds, so the second
       // call must be a harmless no-op rather than an addSource() throw on a source that's already there.
-      if (map.getSource("events")) return;
+      if (map.getSource("tiles")) return;
       const theme = MAP_THEME[currentTheme];
-      // One source, all events. Each layer is FILTERED BY geom_precision so a source can only
-      // render at the precision it actually has — a track never becomes a pin, a point never a line.
-      map.addSource("events", { type: "geojson", data: fc });
-      // Counties are their OWN source — deduped server-side to one polygon per county — so a county
-      // is drawn ONCE and its fill never darkens with the number of events attached to it.
-      map.addSource("places", { type: "geojson", data: places });
-
-      // County attribution: a DASHED outline + faint fill deliberately reads as an administrative
-      // attribution, NEVER a measured extent or a pinpoint. Drawn first (under everything else).
-      // Fill opacity stays ≤0.10 in light (design-lock: attribution, never a measured extent).
-      map.addLayer({
-        id: "counties-fill", type: "fill", source: "places",
-        paint: { "fill-color": theme.county, "fill-opacity": theme.countyFillOp }
+      // ONE vector source for the whole tileset — events and counties are two source-layers baked
+      // into the same PMTiles archive (tile-joined at build time), not two separate fetches the way
+      // /api/events + /api/places used to be. promoteId lets MapLibre feature-state (hover/selected
+      // highlighting on counties, below) key off place_id without a second lookup source.
+      map.addSource("tiles", {
+        type: "vector",
+        url: "pmtiles://" + TILES_URL,
+        promoteId: { counties: "place_id" }
       });
+
+      // County attribution, THREE layers over the same polygons, deliberately separated by role:
+      //  - counties-line: the dashed hairline outline, drawn for EVERY county nationwide, always —
+      //    reads as an administrative boundary, never a measured extent or a pinpoint.
+      //  - counties-hit: an invisible fill used ONLY for hover/click hit-testing (a 1.3px dashed
+      //    line is too thin a target to click reliably) — its opacity rises on hover (feature-state)
+      //    to give the "hover highlight" and is otherwise fully transparent.
+      //  - counties-selected: the amber attribution fill, filtered (via setSelectedCounty) to show
+      //    ONLY the county whose dossier is currently open — replaces the old always-on fill that
+      //    used to render under every county that had at least one event.
       map.addLayer({
-        id: "counties-line", type: "line", source: "places",
+        id: "counties-line", type: "line", source: "tiles", "source-layer": "counties",
         paint: {
           "line-color": theme.county, "line-opacity": theme.countyLineOp,
           "line-width": 1.3, "line-dasharray": [2, 1.6]
         }
       });
+      map.addLayer({
+        id: "counties-hit", type: "fill", source: "tiles", "source-layer": "counties",
+        paint: {
+          "fill-color": theme.county,
+          "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], theme.countyFillOp, 0]
+        }
+      });
+      // Fill opacity stays ≤0.10 in light (design-lock: attribution, never a measured extent).
+      // Filter starts as "match nothing" — setSelectedCounty(placeId) narrows it once a dossier
+      // opens; reset back to "nothing" (not removed) when it closes, see setSelectedCounty below.
+      map.addLayer({
+        id: "counties-selected", type: "fill", source: "tiles", "source-layer": "counties",
+        filter: ["==", ["get", "place_id"], ""],
+        paint: { "fill-color": theme.county, "fill-opacity": theme.countyFillOp }
+      });
 
       // Cyclone best-track: a LINE we observed. Cool blue, drawn under the amber quake points.
       map.addLayer({
-        id: "tracks", type: "line", source: "events",
+        id: "tracks", type: "line", source: "tiles", "source-layer": "events",
         filter: ["==", ["get", "geom_precision"], "track_line"],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
@@ -429,8 +642,16 @@
           "line-opacity": 0.9, "line-blur": 0.3
         }
       });
+      // Magnitude-driven sizing, coalesce-guarded (Task 10 review ruling): the Task 11 ship bake
+      // adds `intensity_value` to the events source-layer's properties; against THOSE tiles the
+      // interpolate below scales each quake by its recorded magnitude, keeping the legend's
+      // "size = magnitude" claim true. Against the current SPIKE tiles (schema: event_id,
+      // hazard_class, geom_precision, year — see task-8-report.md) the property is absent, so
+      // ["get","intensity_value"] is null on every feature and coalesce falls to the constant 3 —
+      // an honest fixed radius, never a fabricated magnitude. Same expression, both eras; nothing
+      // here needs to change when the ship bake lands.
       map.addLayer({
-        id: "quakes-glow", type: "circle", source: "events",
+        id: "quakes-glow", type: "circle", source: "tiles", "source-layer": "events",
         filter: ["==", ["get", "geom_precision"], "observed_point"],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 8, 5, 34],
@@ -438,7 +659,7 @@
         }
       });
       map.addLayer({
-        id: "quakes", type: "circle", source: "events",
+        id: "quakes", type: "circle", source: "tiles", "source-layer": "events",
         filter: ["==", ["get", "geom_precision"], "observed_point"],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["coalesce", ["get", "intensity_value"], 3], 3, 3, 5, 13],
@@ -446,6 +667,19 @@
           "circle-stroke-width": 1, "circle-stroke-color": theme.quakeStroke
         }
       });
+    }
+
+    // The amber "county has an open dossier" fill — the ONLY thing that draws the attribution fill
+    // now (see counties-selected above). Filtering to a place_id of "" (never a real id) instead of
+    // removing the layer or clearing the filter keeps this symmetric with applyFilters()'s
+    // getLayer() guard below and means "no county selected" and "county X selected" are the exact
+    // same code path. Re-applied after every style.load (setTheme) alongside applyFilters(), so a
+    // theme toggle doesn't silently drop the highlight out from under an open dossier.
+    function setSelectedCounty(placeId) {
+      selectedPlaceId = placeId || null;
+      if (map.getLayer("counties-selected")) {
+        map.setFilter("counties-selected", ["==", ["get", "place_id"], selectedPlaceId || ""]);
+      }
     }
 
     // Toggle = swap the basemap style, then rebuild sources/layers + re-run applyFilters() once
@@ -486,133 +720,234 @@
         clearTimeout(failTimer);
         addDataLayers();
         applyFilters();
+        // Re-apply the open county's amber fill (dropped along with everything else by setStyle) —
+        // the dossier itself is a DOM panel and stays open across the toggle, so the highlight must
+        // survive too, exactly like the hazard/time filters above.
+        setSelectedCounty(selectedPlaceId);
         themeSwitchPending = false;
       });
     }
 
-    map.on("load", async () => {
+    map.on("load", () => {
       // The initial-load-only failure path above is now moot — the map has loaded — so tear it
       // down; it must never fire again (in particular, it must not fire on later toggle-time errors).
       map.off("error", onInitialMapError);
       const loadPill = $("load-pill");
-      // Both requests fire concurrently, same as before — but events is awaited separately so a
-      // rejection there (network error, non-JSON, non-2xx status, wrong shape, etc.) can't blow up
-      // as an unhandled rejection in this async callback and can't take the places fetch down with
-      // it (Promise.all would reject the whole thing on the first rejected member).
-      const eventsPromise = fetch(API_BASE + "/api/events").then((r) => {
-        // A FastAPI 500 still resolves with a JSON error body — r.ok is the only way to catch that
-        // before it's mistaken for real data. Throwing here routes it into the same catch below as
-        // a network-level rejection, so there's exactly one failure path to keep honest.
-        if (!r.ok) throw new Error("events fetch failed: " + r.status);
-        return r.json();
-      });
-      // Degrade gracefully if the API predates /api/places (e.g. web deploys before the API):
-      // the map still shows pins/tracks, just no county fill, instead of hard-failing on load.
-      const placesPromise = fetch(API_BASE + "/api/places").then(r => r.json()).catch(() => EMPTY_FC);
 
-      let eventsOk = true;
-      try {
-        const eventsRaw = await eventsPromise;
-        // Shape check, mirroring the places validation just below: valid JSON that isn't actually a
-        // FeatureCollection (an error body, or some future differently-shaped success response) must
-        // fail the same way a rejected fetch does — not get handed to addDataLayers()/initFilterUI()
-        // and thrown from deep inside them, leaving the pill stuck on "loading records…" forever.
-        if (!eventsRaw || eventsRaw.type !== "FeatureCollection") {
-          throw new Error("events response was not a FeatureCollection");
-        }
-        fc = eventsRaw;
-      } catch (err) {
-        eventsOk = false;
-        fc = EMPTY_FC;
-        console.error("failed to load events", err);
-      }
-      const placesRaw = await placesPromise;
-      places = placesRaw && placesRaw.type === "FeatureCollection" ? placesRaw : EMPTY_FC;
-
-      // fc stays EMPTY_FC on failure (its initial value), so this still renders an empty events
-      // source + whatever counties loaded — never a hard fail, never a fabricated pin.
+      // Nothing here waits on a network response before calling this — MapLibre requests pmtiles
+      // ranges lazily as tiles enter view, so the source/layers exist immediately; whether the
+      // ARCHIVE itself is actually reachable is determined below via the source's own load/error
+      // events, same honest-failure contract as the old /api/events fetch had.
       addDataLayers();
-      for (const id of ["counties-fill", "tracks", "quakes"]) {
+      // A deep-linked dossier (?place=/?q= — see handleUrlParams) can resolve and call
+      // setSelectedCounty BEFORE this first addDataLayers(): its getLayer guard makes that a no-op,
+      // and unlike a theme toggle the INITIAL load path has no style.load re-run to re-apply it —
+      // so without this line a deep-linked county opens its dossier with no amber fill.
+      setSelectedCounty(selectedPlaceId);
+      for (const id of ["counties-hit", "tracks", "quakes"]) {
         map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
         map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
       }
       // A pin/track click opens that event; a county click opens the county dossier (its event list).
       map.on("click", "tracks", (e) => openEvent(e.features[0].properties.event_id));
       map.on("click", "quakes", (e) => openEvent(e.features[0].properties.event_id));
-      map.on("click", "counties-fill", (e) => openPlace(e.features[0].properties.place_id));
-      // Empty-basemap click closes the filter panel; feature clicks (handled above) leave it alone.
-      // Guard the layer list through getLayer() — mid-theme-swap, setStyle() briefly wipes layers,
-      // and queryRenderedFeatures throws on an unknown layer id in some MapLibre versions.
+      map.on("click", "counties-hit", (e) => openPlace(e.features[0].properties.place_id));
+      // Hover highlight on counties: feature-state, keyed by the place_id promoteId set on the
+      // source (see addDataLayers). Registered once, on the map, like the click handlers above —
+      // survives a theme toggle without re-registering because it's delegated by layer id, not tied
+      // to any particular style. Only one county is ever "hovered" at a time.
+      let hoveredCountyId = null;
+      function clearCountyHover() {
+        if (hoveredCountyId === null) return;
+        map.setFeatureState({ source: "tiles", sourceLayer: "counties", id: hoveredCountyId }, { hover: false });
+        hoveredCountyId = null;
+      }
+      map.on("mousemove", "counties-hit", (e) => {
+        if (!e.features.length) return;
+        const id = e.features[0].id;
+        if (id === undefined || id === hoveredCountyId) return;
+        clearCountyHover();
+        hoveredCountyId = id;
+        map.setFeatureState({ source: "tiles", sourceLayer: "counties", id }, { hover: true });
+      });
+      map.on("mouseleave", "counties-hit", clearCountyHover);
+      // Empty-basemap click closes the filter panel (and any open search results — closeSearchResults
+      // is defined further down but hoisted within this same function scope); feature clicks
+      // (handled above) leave both alone. Guard the layer list through getLayer() — mid-theme-swap,
+      // setStyle() briefly wipes layers, and queryRenderedFeatures throws on an unknown layer id in
+      // some MapLibre versions.
       map.on("click", (e) => {
-        const interactive = ["quakes", "tracks", "counties-fill"].filter((id) => map.getLayer(id));
+        const interactive = ["quakes", "tracks", "counties-hit"].filter((id) => map.getLayer(id));
         const hit = interactive.length ? map.queryRenderedFeatures(e.point, { layers: interactive }) : [];
-        if (hit.length === 0) $("filter-panel").classList.remove("open");
+        if (hit.length === 0) {
+          $("filter-panel").classList.remove("open");
+          closeSearchResults();
+        }
       });
 
-      if (eventsOk) {
-        initFilterUI(fc.features);
-        loadPill.style.display = "none";
-      } else {
-        // Honesty contract: this copy is exact, do not reword — absence of data must never read
-        // as absence of events. Skip filter setup entirely; it has nothing real to build from.
-        loadPill.textContent = "records unavailable — the map is showing no events, not zero events.";
-        loadPill.classList.add("error");
-        // A clickable-looking FILTER pill with nothing real to filter is a lie of affordance —
-        // hide it rather than let it open an empty/stale panel.
-        $("filter-pill").style.display = "none";
+      // Honest loading pill, now keyed off the "tiles" vector source's own load/error events
+      // instead of the old /api/events fetch resolving/rejecting — SAME user-facing copy, SAME
+      // "loading -> loaded/failed, never a silent dead-end" contract. Settles exactly once:
+      // "sourcedata" re-fires on every pan/zoom that brings new tiles into view (each one has
+      // isSourceLoaded true once ITS tiles finish), and a theme toggle wipes + re-adds this same
+      // source, so without the guard this would refire on events that aren't the initial load.
+      let tilesSourceSettled = false;
+      // Set on the FIRST successful tile delivery from the archive. Once any tile has arrived, a
+      // later per-tile fetch error cannot mean "the archive is unreachable" — latching the failure
+      // state on one would kill a healthy map for the whole session over a transient hiccup.
+      let firstTileLoaded = false;
+      // Only one archive-liveness probe in flight at a time — the initial viewport fires dozens of
+      // Range requests, and a real outage would otherwise stampede getHeader() probes.
+      let tilesProbePending = false;
+      function settleTilesSource(ok, err) {
+        if (tilesSourceSettled) return;
+        tilesSourceSettled = true;
+        clearTimeout(tilesSourceTimeout);
+        if (ok) {
+          initFilterUI();
+          loadPill.style.display = "none";
+          tilesReady = true;
+          tilesReadyQueue.splice(0).forEach((cb) => cb());
+        } else {
+          console.error("failed to load tile source", err);
+          // Honesty contract: this copy is exact, do not reword — absence of data must never read
+          // as absence of events.
+          loadPill.textContent = "records unavailable — the map is showing no events, not zero events.";
+          loadPill.classList.add("error");
+          // A clickable-looking FILTER pill with nothing real to filter is a lie of affordance —
+          // hide it rather than let it open an empty/stale panel.
+          $("filter-pill").style.display = "none";
+        }
+        themeSwitchPending = false;
       }
-      themeSwitchPending = false;
+      map.on("sourcedata", (e) => {
+        if (e.sourceId !== "tiles") return;
+        // A tile-scoped sourcedata event marks an individual tile's data arriving — the earliest
+        // proof the archive is actually serving. (isSourceLoaded below can lag this by many tiles.)
+        if (e.tile) firstTileLoaded = true;
+        // Gate success-settle on firstTileLoaded too, not just isSourceLoaded: MapLibre can in
+        // theory report a source "loaded" once it's done trying every tile currently in view, even
+        // if every one of those requests errored — isSourceLoaded alone isn't proof anything was
+        // actually delivered. Requiring at least one real tile-scoped sourcedata event forecloses
+        // that all-tiles-errored false-success race.
+        if (e.isSourceLoaded && firstTileLoaded) settleTilesSource(true);
+      });
+      // Failure detection is deliberately NARROWER than "any error with sourceId tiles": this
+      // listener lives for the whole session, and MapLibre surfaces every per-tile fetch stumble
+      // through it. Latching the (settle-once, permanent) failure state off one transient network
+      // error — while the archive itself is healthy — would be the opposite of the honesty
+      // contract: the map would claim "records unavailable" about records it could still fetch.
+      // So: after the first successful tile, errors are log-only — MapLibre does NOT spontaneously
+      // retry a failed tile in the background; it re-requests an errored tile only on the next
+      // pan/zoom/source-reload that brings it back into view (or a theme toggle's source rebuild).
+      // That's an acceptable trade here: the archive has already proven itself alive via
+      // firstTileLoaded, so a stray per-tile error afterward is logged, not latched. Before the
+      // first tile, an error is only a CANDIDATE failure — corroborate via tilesArchive.getHeader().
+      // This is NOT a fresh live network probe on every call: pmtiles caches the header fetch's
+      // promise for the whole session (its SharedPromiseCache), so getHeader() here just reads that
+      // cached outcome. If the archive was dead from startup, the original header fetch already
+      // rejected and every getHeader() call replays that same cached rejection immediately — that's
+      // what latches the honest failure below. If the archive instead dies AFTER a successful header
+      // fetch, the cached promise stays resolved forever, so this probe can never observe that
+      // failure — that class of failure is caught only by the 15s timeout further down, not by this
+      // probe. (Missing tiles never reach here at all — pmtiles resolves tiles absent from the
+      // archive to empty data, not an error.)
+      map.on("error", (e) => {
+        if (e.sourceId !== "tiles" || tilesSourceSettled) return;
+        if (firstTileLoaded) {
+          console.error("tile fetch error (non-fatal: archive already served tiles)", e.error);
+          return;
+        }
+        if (tilesProbePending) return;
+        tilesProbePending = true;
+        tilesArchive.getHeader().then(() => {
+          tilesProbePending = false;
+          console.error("tile fetch error (non-fatal: archive header probe succeeded)", e.error);
+        }).catch((probeErr) => {
+          tilesProbePending = false;
+          settleTilesSource(false, probeErr || e.error);
+        });
+      });
+      // Belt-and-suspenders: if neither event above ever fires (an edge case some MapLibre versions
+      // can hit on certain fetch failures that don't attach a sourceId), the pill must not be left
+      // pulsing "loading records…" forever — that would be exactly the silent dead-end this whole
+      // pill exists to prevent.
+      const tilesSourceTimeout = setTimeout(() => settleTilesSource(false, new Error("tile source load timed out")), 15000);
     });
 
-    let allEvents = [];
     let selectedHazards = new Set();
     let timeFrom = null, timeTo = null;
     let minYear, maxYear;
 
-    // Builds the filter pill + panel from the events actually loaded — hazard chips and the
-    // time-range bounds are both DERIVED from real data, never a hardcoded list, so the filter
-    // never offers a choice the atlas doesn't actually contain. Wires every control now; the
-    // functions some of these call (toggleHazard, updateTimeRange, resetFilters) are added in
-    // later tasks — deferred via the arrow-function wrappers below, so this is safe to load
-    // before they exist, as long as nothing is actually clicked/dragged until its task lands.
-    function initFilterUI(features) {
-      allEvents = features;
+    // Flips true once the tile source has actually delivered data (settleTilesSource(true) below) —
+    // queued callbacks (search selection, deep links) run their flyTo/fitBounds only once there's a
+    // real chance the target county's tile is loaded, rather than racing map init. If tiles never
+    // settle (archive unreachable), queued callbacks simply never fire — no fabricated camera move,
+    // and openPlace() still opens the correct dossier independent of this (see goToPlace below).
+    let tilesReady = false;
+    let tilesReadyQueue = [];
+    function onTilesReady(cb) {
+      if (tilesReady) cb();
+      else tilesReadyQueue.push(cb);
+    }
 
-      const years = features
-        .map((f) => new Date(f.properties.time).getUTCFullYear())
-        .filter((y) => !Number.isNaN(y));
-      minYear = Math.min(...years);
-      maxYear = Math.max(...years);
+    // Builds the filter pill + panel. Hazard chips and year bounds come from aggregates.json (the
+    // bake-time national artifact — see AGGREGATES_URL/aggregatesPromise above), NOT from the tile
+    // source: a vector tile source has no client-side way to answer "what hazard classes and year
+    // range exist nationwide" (map.querySourceFeatures only sees whatever tiles happen to be loaded
+    // for the CURRENT viewport/zoom) short of the PMTiles archive's own tippecanoe tilestats
+    // metadata — and tilestats gives exhaustive distinct VALUES but not exact COUNTS (it's a
+    // metadata summary, not a query engine), so it can build a chip list but never an honest count
+    // line. aggregates.json is the one artifact that carries real per-class counts, so it now drives
+    // both. If aggregates.json fails to load, chips fall back to HAZARD_CLASSES_FALLBACK (the known
+    // taxonomy, not a sample) and the time-range section is hidden outright — no aggregates means no
+    // real year_min/year_max, and a slider with fabricated bounds would misrepresent what's
+    // filterable. Hazard-only filtering (via the tile's own hazard_class property) still works. The
+    // functions some of these wire up (toggleHazard, updateTimeRange, resetFilters) are defined
+    // further down — deferred via the arrow-function wrappers below, so this is safe to call before
+    // they exist, as long as nothing is actually clicked/dragged until they're defined.
+    async function initFilterUI() {
+      const agg = await aggregatesPromise;
+      const haveYearBounds = !!agg && agg.year_min != null && agg.year_max != null;
+      const hazardClasses = (agg && agg.by_hazard_class)
+        ? Object.keys(agg.by_hazard_class).sort()
+        : HAZARD_CLASSES_FALLBACK;
+      minYear = haveYearBounds ? agg.year_min : null;
+      maxYear = haveYearBounds ? agg.year_max : null;
 
-      const classes = [...new Set(features.map((f) => f.properties.hazard_class))].sort();
-      $("filter-chips").innerHTML = classes
-        .map((c) => `<span class="fchip" data-class="${c}">${c.replace(/_/g, " ")}</span>`)
+      $("filter-chips").innerHTML = hazardClasses
+        .map((c) => `<span class="fchip" data-class="${c}">${String(c).replace(/_/g, " ")}</span>`)
         .join("");
       $("filter-chips").querySelectorAll(".fchip").forEach((el) => {
         el.onclick = () => toggleHazard(el.dataset.class, el);
       });
 
-      const fromInput = $("time-from");
-      const toInput = $("time-to");
-      fromInput.min = toInput.min = String(minYear);
-      fromInput.max = toInput.max = String(maxYear);
-      fromInput.value = String(minYear);
-      toInput.value = String(maxYear);
-      $("from-val").textContent = String(minYear);
-      $("to-val").textContent = String(maxYear);
-      fromInput.oninput = () => updateTimeRange(fromInput, toInput);
-      toInput.oninput = () => updateTimeRange(fromInput, toInput);
+      if (haveYearBounds) {
+        const fromInput = $("time-from");
+        const toInput = $("time-to");
+        fromInput.min = toInput.min = String(minYear);
+        fromInput.max = toInput.max = String(maxYear);
+        fromInput.value = String(minYear);
+        toInput.value = String(maxYear);
+        $("from-val").textContent = String(minYear);
+        $("to-val").textContent = String(maxYear);
+        fromInput.oninput = () => updateTimeRange(fromInput, toInput);
+        toInput.oninput = () => updateTimeRange(fromInput, toInput);
+        $("time-fsec").style.display = "";
+      } else {
+        // No real year bounds to offer — hide the control rather than render a slider against
+        // fabricated min/max. Hazard-chip filtering (from the fallback constant) is unaffected.
+        $("time-fsec").style.display = "none";
+      }
 
       $("filter-pill").onclick = () => $("filter-panel").classList.toggle("open");
       $("filter-reset").onclick = () => resetFilters();
 
-      $("filter-shown").textContent = String(allEvents.length);
-      $("filter-total").textContent = String(allEvents.length);
+      updateCount();
 
       window.filterDebug = () => ({
-        allEventsCount: allEvents.length,
         selectedHazards: [...selectedHazards],
-        timeFrom, timeTo, minYear, maxYear,
+        timeFrom, timeTo, minYear, maxYear, aggregatesLoaded: !!agg,
       });
     }
 
@@ -628,8 +963,11 @@
       if (selectedHazards.size > 0) {
         clauses.push(["in", ["get", "hazard_class"], ["literal", [...selectedHazards]]]);
       }
-      if (timeFrom) clauses.push([">=", ["get", "time"], timeFrom]);
-      if (timeTo) clauses.push(["<=", ["get", "time"], timeTo]);
+      // The tile schema carries "year" (a number), not the ISO "time" string /api/events used to
+      // return — there's no full timestamp baked into the tile at all. timeFrom/timeTo are plain
+      // year numbers now (see updateTimeRange below), not ISO strings.
+      if (timeFrom !== null) clauses.push([">=", ["get", "year"], timeFrom]);
+      if (timeTo !== null) clauses.push(["<=", ["get", "year"], timeTo]);
       return clauses.length > 1 ? ["all", ...clauses] : base;
     }
 
@@ -646,21 +984,56 @@
       updateBadge();
     }
 
-    // Mirrors withUserFilters in plain JS (not a MapLibre expression) so the "N of TOTAL" count
-    // can include county-precision events too — those never render as pins/tracks (counties
-    // aren't hazard/time-filtered this round, see design spec), but they still count toward totals.
-    function eventMatchesFilters(props) {
-      if (selectedHazards.size > 0 && !selectedHazards.has(props.hazard_class)) return false;
-      if (timeFrom && props.time < timeFrom) return false;
-      if (timeTo && props.time > timeTo) return false;
-      return true;
-    }
-
+    // Count line + locked footnote + the (rewired) filter-empty message, all driven off
+    // aggregates.json — the ONLY source with real national counts. Three cases:
+    //  1. aggregates.json failed to load: hide the count line and footnote entirely (no fabricated
+    //     number, and the footnote only ever accompanies a real count line) and never show
+    //     filter-empty (no aggregate, no proof of anything, "absence of proof ≠ empty").
+    //  2. Full year range (timeFrom/timeTo both null — see updateTimeRange): N is derivable exactly
+    //     — sum by_hazard_class[c] over the selected chips, or total_events if no chips are selected
+    //     (no selection = no restriction = every class counts, and by construction
+    //     sum(by_hazard_class) === total_events). Shows "N of TOTAL events match". filter-empty
+    //     shows if N is provably zero (a real chip selection whose classes all have zero events —
+    //     can only happen with at least one chip selected, since the no-selection case is always
+    //     total_events).
+    //  3. A year filter is active: aggregates.json has no by-year-by-hazard breakdown (deliberately
+    //     not added for A1 — see task brief), so N cannot be derived from it at all. Showing a number
+    //     here would be a real fabrication, not an approximation, so instead: "TOTAL recorded events
+    //     · filters applied" — true, just not as specific. filter-empty never shows in this case:
+    //     the map may still have real matches this aggregate can't count, so a claim of "empty" here
+    //     would be unproven, not just approximate.
+    // The reset button next to the count line is unaffected by any of this and always works.
     function updateCount() {
-      const shown = allEvents.filter((f) => eventMatchesFilters(f.properties)).length;
-      $("filter-shown").textContent = String(shown);
-      $("filter-total").textContent = String(allEvents.length);
-      $("filter-empty").style.display = shown === 0 ? "block" : "none";
+      const textEl = $("fcount-text");
+      const footEl = $("filter-footnote");
+      const emptyEl = $("filter-empty");
+      if (!aggregates) {
+        textEl.style.display = "none";
+        footEl.style.display = "none";
+        emptyEl.style.display = "none";
+        return;
+      }
+      const total = aggregates.total_events;
+      const yearFiltered = timeFrom !== null || timeTo !== null;
+      let n = null;
+      if (!yearFiltered) {
+        n = selectedHazards.size > 0
+          ? [...selectedHazards].reduce((sum, c) => sum + (aggregates.by_hazard_class[c] || 0), 0)
+          : total;
+      }
+      // toLocaleString: "69,983", not "69983" — these are national-scale totals and the raw
+      // digit run misreads at a glance.
+      textEl.innerHTML = (n !== null)
+        ? `<b>${n.toLocaleString()}</b> of ${total.toLocaleString()} events match`
+        : `<b>${total.toLocaleString()}</b> recorded events &middot; filters applied`;
+      // fcount-text has no CSS-class default (a plain <span>, "" correctly falls back to inline);
+      // filter-footnote/filter-empty are both CSS-authored `display:none` by default (see .ffoot/
+      // .fempty above — the panel must open with the empty message invisible until proven true), so
+      // showing them needs an explicit override, not "" (which would just re-expose the class's own
+      // `none` and silently never show them at all).
+      textEl.style.display = "";
+      footEl.style.display = "block";
+      emptyEl.style.display = (n === 0) ? "block" : "none";
     }
 
     function updateBadge() {
@@ -688,8 +1061,8 @@
         fromInput.value = String(from);
         toInput.value = String(to);
       }
-      timeFrom = from === minYear ? null : `${from}-01-01T00:00:00`;
-      timeTo = to === maxYear ? null : `${to}-12-31T23:59:59`;
+      timeFrom = from === minYear ? null : from;
+      timeTo = to === maxYear ? null : to;
       $("from-val").textContent = String(from);
       $("to-val").textContent = String(to);
       applyFilters();
@@ -698,12 +1071,16 @@
     function resetFilters() {
       selectedHazards.clear();
       $("filter-chips").querySelectorAll(".fchip.on").forEach((el) => el.classList.remove("on"));
-      const fromInput = $("time-from");
-      const toInput = $("time-to");
-      fromInput.value = String(minYear);
-      toInput.value = String(maxYear);
-      $("from-val").textContent = String(minYear);
-      $("to-val").textContent = String(maxYear);
+      // minYear/maxYear are null when aggregates.json failed to load (see initFilterUI) — the
+      // time-range control is hidden in that case, so there's no slider DOM to reset either.
+      if (minYear != null && maxYear != null) {
+        const fromInput = $("time-from");
+        const toInput = $("time-to");
+        fromInput.value = String(minYear);
+        toInput.value = String(maxYear);
+        $("from-val").textContent = String(minYear);
+        $("to-val").textContent = String(maxYear);
+      }
       timeFrom = null;
       timeTo = null;
       applyFilters();
@@ -723,12 +1100,26 @@
 
     // A county click opens a place dossier: the county + the list of events recorded there. Each
     // list row drills into that event's own dossier (which stacks above this panel).
+    // Returns true (opened) | "notfound" (a real 404 — no such place) | false (any other failure:
+    // network down, 5xx, bad JSON), so deep-link/search callers can react honestly AND accurately —
+    // "no county matched" and "the API is unreachable" are different truths and must get different
+    // copy (see handleUrlParams below). Existing callers (map click, search selection) ignore the
+    // return value; unchanged for them.
     async function openPlace(placeId) {
       try {
-        const place = await (await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId))).json();
+        const res = await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId));
+        if (res.status === 404) return "notfound";
+        if (!res.ok) throw new Error("place fetch failed: " + res.status);
+        const place = await res.json();
         showCountyDossier(place);
+        // The amber attribution fill lights up ONLY this county now that its dossier is open — set
+        // after the fetch succeeds (not optimistically on click) so a failed fetch never highlights
+        // a county whose dossier never actually opened.
+        setSelectedCounty(placeId);
+        return true;
       } catch (err) {
         console.error("failed to load place", placeId, err);
+        return false;
       }
     }
     window.openPlace = openPlace;
@@ -737,39 +1128,299 @@
     const panel = $("panel");
     const countyPanel = $("county-panel");
     $("close").onclick = () => panel.classList.remove("open");
-    $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); };
+    $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); setSelectedCounty(null); };
     $("theme-pill").onclick = () => setTheme(currentTheme === "light" ? "dark" : "light");
 
-    // Escape closes exactly the topmost open panel, one per keypress: event dossier (z-index 7)
-    // first, then county dossier (z-index 6), then the filter panel. Deliberately does NOT reuse
-    // #cclose's handler — that closes both dossiers at once, but Escape on the county panel alone
-    // must close only the county panel (the event panel, if any, is already gone by then).
+    // --- Honest no-match / no-op toast (Task 10 item 2) — reused by deep links below. Click-to-
+    // dismiss, plus a generous auto-hide; never silently disappears the very first frame. ---
+    let honestToastTimer = null;
+    function showHonestToast(msg) {
+      const el = $("honest-toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(honestToastTimer);
+      honestToastTimer = setTimeout(() => el.classList.remove("show"), 8000);
+    }
+    $("honest-toast").onclick = () => $("honest-toast").classList.remove("show");
+
+    // --- Search control (Task 10 item 1) ---
+    let searchDebounceTimer = null;
+    let searchResults = [];
+    let searchActiveIndex = -1;
+    // Monotonic request token: bumped by every new lookup AND by closeSearchResults, and checked
+    // again after the await in runSearch. Kills two stale-response bugs at once: a SLOW earlier
+    // query ("bun") resolving after a FAST later one ("buncombe") already rendered must not
+    // overwrite it, and a response landing after the user selected a result / cleared the input
+    // must not reopen the dropdown.
+    let searchSeq = 0;
+
+    function closeSearchResults() {
+      // A pending debounce timer must not fire and reopen the list ~280ms after it was closed
+      // (selection and input-cleared both route through here) — and the token bump invalidates
+      // any lookup already in flight for the same reason.
+      clearTimeout(searchDebounceTimer);
+      searchSeq++;
+      const el = $("search-results");
+      el.innerHTML = "";
+      el.classList.remove("open");
+      $("search-input").setAttribute("aria-expanded", "false");
+      searchResults = [];
+      searchActiveIndex = -1;
+    }
+
+    function updateSearchActive() {
+      $("search-results").querySelectorAll(".sresult").forEach((el, i) => {
+        el.classList.toggle("active", i === searchActiveIndex);
+      });
+    }
+
+    function selectSearchResult(idx) {
+      const m = searchResults[idx];
+      if (!m) return;
+      $("search-input").value = m.name + (m.state ? ", " + m.state : "");
+      closeSearchResults();
+      goToPlace(m.place_id);
+    }
+
+    function renderSearchResults(matches) {
+      searchResults = matches;
+      searchActiveIndex = -1;
+      const el = $("search-results");
+      el.innerHTML = matches.length
+        ? matches.map((m, i) =>
+            `<div class="sresult" data-idx="${i}" role="option">${m.name}${m.state ? ", " + m.state : ""}</div>`
+          ).join("")
+        : '<div class="sresult-empty">No matches</div>';
+      el.querySelectorAll(".sresult").forEach((row) => {
+        row.onclick = () => selectSearchResult(Number(row.dataset.idx));
+      });
+      el.classList.add("open");
+      $("search-input").setAttribute("aria-expanded", "true");
+    }
+
+    // Shared by the search box (runSearch) and the ?q= deep link (handleUrlParams) — checks
+    // res.ok so a malformed/error response (e.g. a 404 with an unrelated JSON body) throws into the
+    // caller's catch instead of silently degrading into "0 matches" (data.matches would just be
+    // undefined -> [] otherwise, indistinguishable from a genuine no-match).
+    async function placeLookup(q) {
+      const res = await fetch(API_BASE + "/api/place-lookup?q=" + encodeURIComponent(q));
+      if (!res.ok) throw new Error("place-lookup failed: " + res.status);
+      const data = await res.json();
+      return Array.isArray(data.matches) ? data.matches : [];
+    }
+
+    async function runSearch(q) {
+      q = q.trim();
+      if (q.length < 2) { closeSearchResults(); return; }
+      const seq = ++searchSeq;
+      try {
+        const matches = await placeLookup(q);
+        if (seq !== searchSeq) return;  // superseded or closed while in flight — never render stale
+        renderSearchResults(matches);
+      } catch (err) {
+        console.error("place-lookup failed", err);
+        if (seq === searchSeq) closeSearchResults();
+      }
+    }
+
+    $("search-input").addEventListener("input", (e) => {
+      clearTimeout(searchDebounceTimer);
+      const val = e.target.value;
+      // Under 2 chars: close any stale list and skip the network entirely — no request under 2
+      // chars (item 1), and the debounce below only ever gates the FETCH, not this floor.
+      if (val.trim().length < 2) { closeSearchResults(); return; }
+      // ≥250ms debounce (design-lock, item 1); 280ms gives comfortable margin over the floor.
+      searchDebounceTimer = setTimeout(() => runSearch(val), 280);
+    });
+
+    // Arrow/Enter navigation only — Escape is deliberately handled centrally below (the search
+    // results list is the TOPMOST layer of the Esc-stack when open; see the keydown listener).
+    $("search-input").addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        searchActiveIndex = Math.min(searchActiveIndex + 1, searchResults.length - 1);
+        updateSearchActive();
+      } else if (e.key === "ArrowUp") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        searchActiveIndex = Math.max(searchActiveIndex - 1, 0);
+        updateSearchActive();
+      } else if (e.key === "Enter") {
+        if (!searchResults.length) return;
+        e.preventDefault();
+        selectSearchResult(searchActiveIndex >= 0 ? searchActiveIndex : 0);
+      }
+    });
+
+    // Click-away: dismiss the results list on any click outside the search control (mirrors the
+    // map's own "empty-basemap click closes the filter panel" behavior below).
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".search-wrap")) closeSearchResults();
+    });
+
+    // Sums a GeoJSON Polygon/MultiPolygon's coordinate extent — a manual walk (not
+    // Math.min/max(...spread)) because a county's ring can carry thousands of points and a spread
+    // that large risks "Maximum call stack size exceeded" in some engines.
+    function geometryBounds(geom) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      (function walk(a) {
+        if (typeof a[0] === "number") {
+          if (a[0] < minLng) minLng = a[0];
+          if (a[0] > maxLng) maxLng = a[0];
+          if (a[1] < minLat) minLat = a[1];
+          if (a[1] > maxLat) maxLat = a[1];
+          return;
+        }
+        a.forEach(walk);
+      })(geom.coordinates);
+      return [[minLng, minLat], [maxLng, maxLat]];
+    }
+
+    // /api/place/{id} does NOT carry geometry (api/main.py's _PLACE_ONE selects only place_id/kind/
+    // name/state) — the only geometry available client-side is the county polygon already baked
+    // into the "counties" tile source-layer. querySourceFeatures only sees features from tiles
+    // MapLibre has already loaded for the CURRENT viewport/zoom; since the app's initial view is
+    // now national (continental-US center/zoom, item 5), most counties' tiles are already resident
+    // by the time a search fires. If the target county's tile genuinely isn't loaded (e.g. the user
+    // has zoomed into one region and searches for a county far outside it), this honestly returns
+    // false and the caller just opens the dossier without a camera move — never a fabricated or
+    // wrong-place flyTo.
+    function flyToPlaceIfKnown(placeId) {
+      if (!map.getSource("tiles")) return false;
+      const feats = map.querySourceFeatures("tiles", {
+        sourceLayer: "counties",
+        filter: ["==", ["get", "place_id"], placeId]
+      });
+      // A county straddling a tile boundary comes back as MULTIPLE features — one clipped fragment
+      // per tile. Framing only the first fragment would fit half (or less) of the county, so
+      // accumulate the extent across EVERY fragment before fitting.
+      let bounds = null;
+      for (const f of feats) {
+        if (!f.geometry) continue;
+        const b = geometryBounds(f.geometry);
+        if (!bounds) {
+          bounds = b;
+        } else {
+          if (b[0][0] < bounds[0][0]) bounds[0][0] = b[0][0];
+          if (b[0][1] < bounds[0][1]) bounds[0][1] = b[0][1];
+          if (b[1][0] > bounds[1][0]) bounds[1][0] = b[1][0];
+          if (b[1][1] > bounds[1][1]) bounds[1][1] = b[1][1];
+        }
+      }
+      if (!bounds) return false;
+      try {
+        map.fitBounds(bounds, { padding: 80, duration: 1000, maxZoom: 9 });
+        return true;
+      } catch (err) {
+        console.error("fitBounds failed for", placeId, err);
+        return false;
+      }
+    }
+    window.flyToPlaceIfKnown = flyToPlaceIfKnown;  // exposed for tests (same pattern as openPlace)
+
+    // The shared "select a place" entry point for search selection and deep links: fly (best-
+    // effort, see flyToPlaceIfKnown) + open its dossier. Queuing the fly via onTilesReady means a
+    // very early selection (before the tile source has delivered anything) still gets its camera
+    // move once tiles are ready, rather than just silently skipping it.
+    async function goToPlace(placeId) {
+      onTilesReady(() => flyToPlaceIfKnown(placeId));
+      return openPlace(placeId);
+    }
+
+    // --- URL deep links (Task 10 item 2): ?place=county:XXXXX opens that dossier directly;
+    // ?q=text runs the lookup and opens the single match, or shows the results list prefilled for
+    // multiple matches. No match, either param: an honest toast, never a silent no-op. ---
+    async function handleUrlParams() {
+      const params = new URLSearchParams(location.search);
+      const placeParam = params.get("place");
+      const qParam = params.get("q");
+      if (placeParam) {
+        const r = await goToPlace(placeParam);
+        if (r === "notfound") {
+          // A real 404: the place id genuinely doesn't exist — a no-match is the honest message.
+          showHonestToast("No county matched '" + placeParam + "' — try your county's name.");
+        } else if (r !== true) {
+          // Anything else (network down, 5xx, bad JSON) is NOT a no-match — saying "no county
+          // matched" about an API we couldn't reach would be its own small lie.
+          showHonestToast("Search is unavailable right now — try again shortly.");
+        }
+        return;
+      }
+      if (qParam !== null) {
+        const q = qParam.trim();
+        $("search-input").value = q;
+        if (q.length < 2) return;  // mirrors the API's own 2-char floor — nothing honest to say yet
+        try {
+          const matches = await placeLookup(q);
+          if (matches.length === 1) {
+            // The lookup FOUND this county, so a failure here (404 included — found-then-vanished
+            // is an API inconsistency, not a no-match) must not silently no-op either.
+            if (await goToPlace(matches[0].place_id) !== true) {
+              showHonestToast("Search is unavailable right now — try again shortly.");
+            }
+          } else if (matches.length > 1) {
+            renderSearchResults(matches);
+          } else {
+            showHonestToast("No county matched '" + q + "' — try your county's name.");
+          }
+        } catch (err) {
+          console.error("deep-link place-lookup failed", err);
+          showHonestToast("Search is unavailable right now — try again shortly.");
+        }
+      }
+    }
+
+    // Escape closes exactly the topmost open layer, one per keypress: the honest toast and search
+    // results (both can float above everything) first, then the event dossier (z-index 7), then the
+    // county dossier (z-index 6), then the filter panel. Deliberately does NOT reuse #cclose's
+    // handler — that closes both dossiers at once, but Escape on the county panel alone must close
+    // only the county panel (the event panel, if any, is already gone by then).
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      if (panel.classList.contains("open")) {
+      if ($("honest-toast").classList.contains("show")) {
+        $("honest-toast").classList.remove("show");
+      } else if ($("search-results").classList.contains("open")) {
+        closeSearchResults();
+      } else if (panel.classList.contains("open")) {
         panel.classList.remove("open");
       } else if (countyPanel.classList.contains("open")) {
         countyPanel.classList.remove("open");
+        setSelectedCounty(null);
       } else if ($("filter-panel").classList.contains("open")) {
         $("filter-panel").classList.remove("open");
       }
     });
 
-    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
-    const truthy = (o, k) => o[k] === true || o[k] === "true";
+    handleUrlParams();
+    // Exposed (same pattern as openEvent/openPlace): re-runnable against a pushState'd URL for
+    // tests, and the natural hook if history-based navigation is ever added.
+    window.handleUrlParams = handleUrlParams;
 
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
     // FEMA designations group under Federal declarations — administrative, never a loss measure.
     function showCountyDossier(place) {
       $("c-name").textContent = place.name + (place.state ? ", " + place.state : "");
-      const n = place.event_count;
-      $("c-count").textContent = n + " recorded " + (n === 1 ? "event" : "events") +
-        " — click one for its dossier";
-      const all = place.events || [];
-      const fema = all.filter((e) => e.source === "fema");
-      const other = all.filter((e) => e.source !== "fema");
-      function rowHtml(e) {
+      // total_events is the true (uncapped) count; event_count is the same value (API contract —
+      // see api/main.py's /api/place/{id}) kept only as a defensive fallback.
+      const total = typeof place.total_events === "number" ? place.total_events : (place.event_count || 0);
+      const events = place.events || [];
+      if (total === 0) {
+        // Locked honesty copy (Task 10 item 3b) — verbatim, do not reword.
+        $("c-count").textContent = "No events attached to this county in our data since 1996. " +
+          "Absence of a record is not absence of hazard.";
+        $("c-note").textContent = "";
+      } else {
+        $("c-count").textContent = total.toLocaleString() + " recorded " +
+          (total === 1 ? "event" : "events") + " — click one for its dossier";
+        // Locked honesty copy (Task 10 item 3a) — verbatim, do not reword. Only ever shown when the
+        // dossier's 500-row cap actually truncated what's listed below.
+        $("c-note").textContent = (total > events.length)
+          ? "showing the most recent 500 of " + total.toLocaleString() + " recorded events"
+          : "";
+      }
+      $("c-list").innerHTML = events.map((e) => {
         const type = (e.hazard_type || "event").replace(/_/g, " ");
         const date = (e.time || "").slice(0, 10);
         // FEMA is administrative only — never an impact ✓, even if a bad payload claims otherwise.

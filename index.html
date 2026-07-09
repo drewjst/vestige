@@ -381,10 +381,10 @@
         </a>
       </div>
       <div class="chips" id="chips">
-        <button class="chip"><span class="dot" style="background:var(--hz-heat)"></span>The 2021 heat dome &middot; Portland</button>
-        <button class="chip"><span class="dot" style="background:var(--hz-tornado)"></span>The 2011 Joplin EF5</button>
-        <button class="chip"><span class="dot" style="background:var(--hz-flood)"></span>What flooded Asheville</button>
-        <button class="chip"><span class="dot" style="background:var(--hz-fire)"></span>2020 Almeda wildfire &middot; Oregon</button>
+        <button class="chip" data-q="Multnomah, OR"><span class="dot" style="background:var(--hz-heat)"></span>The 2021 heat dome &middot; Portland</button>
+        <button class="chip" data-q="Jasper, MO"><span class="dot" style="background:var(--hz-tornado)"></span>The 2011 Joplin EF5</button>
+        <button class="chip" data-q="Buncombe, NC"><span class="dot" style="background:var(--hz-flood)"></span>What flooded Asheville</button>
+        <button class="chip" data-q="Jackson, OR"><span class="dot" style="background:var(--hz-fire)"></span>2020 Almeda wildfire &middot; Oregon</button>
       </div>
       <div class="trust">Free &middot; public data &mdash; <b>NOAA Storm Events</b> &middot; <b>USGS</b> &middot; <b>FEMA</b> &middot; <b>IBTrACS</b></div>
       <div class="live" id="live" aria-live="polite"><span class="pulse"></span><span id="live-txt"></span></div>
@@ -415,8 +415,11 @@
 <section class="band dossier" id="dossier">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow rv">A single place, as the record holds it</div>
+      <div class="eyebrow rv">Featured dossiers &middot; hand-reconciled, real</div>
       <h2 class="lede-h rv" id="dossierHead">What you'd find under Asheville.</h2>
+      <p class="rv">Six places, picked and fully reconciled by hand as a demonstration — not the limit
+        of the atlas. All 3,233 U.S. counties are already on the map with their own real, recorded
+        history; these six just get the guided tour.</p>
     </div>
     <div class="tabs rv" role="tablist" aria-label="Recorded places" id="dossierTabs"></div>
     <div class="profile rv" id="dossierProfile" aria-live="polite"></div>
@@ -539,11 +542,26 @@
     var t = e.target.closest("[data-toast]");
     if(t){ e.preventDefault(); toast(t.getAttribute("data-toast")); }
   });
+  // Chips + hero search forward into the atlas as a real deep link (?q=<text>), not a bare nav —
+  // app.html's own search (Task 10) resolves it: a single match flies straight to that county's
+  // dossier, otherwise the results list opens prefilled. Each chip's data-q is the REAL county name
+  // for that featured place (verified against the DOSSIER data below — e.g. Portland's heat dome
+  // chip forwards "Multnomah, OR", the actual county place-lookup matches on), not the city name a
+  // reader would recognize — /api/place-lookup matches county name/state, not city names.
   document.getElementById("chips").addEventListener("click", function(e){
-    if(e.target.closest(".chip")) window.location.href = "app.html";
+    var chip = e.target.closest(".chip");
+    if(!chip) return;
+    var q = chip.getAttribute("data-q") || chip.textContent.trim();
+    window.location.href = "app.html?q=" + encodeURIComponent(q);
   });
   var qEl = document.getElementById("q");
-  if(qEl) qEl.addEventListener("keydown", function(e){ if(e.key === "Enter") window.location.href = "app.html"; });
+  function goSearch(){
+    var q = qEl && qEl.value.trim();
+    window.location.href = q ? "app.html?q=" + encodeURIComponent(q) : "app.html";
+  }
+  if(qEl) qEl.addEventListener("keydown", function(e){ if(e.key === "Enter") goSearch(); });
+  var goEl = document.querySelector(".hero .go");
+  if(goEl) goEl.addEventListener("click", function(e){ if(qEl && qEl.value.trim()){ e.preventDefault(); goSearch(); } });
 
   /* ---------- hazards ---------- */
   var HAZ = [
