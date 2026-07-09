@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/drewjst/vestige/compare/vestige-web-v0.4.0...vestige-web-v0.5.0) (2026-07-09)
+
+
+### Features
+
+* A1 national breadth — PMTiles atlas + search (draft — tiles ship gate) ([3a6aefa](https://github.com/drewjst/vestige/commit/3a6aefaed3ce25422de4a5a96cdb0623999673ed))
+
 ## [0.4.0](https://github.com/drewjst/vestige/compare/vestige-web-v0.3.0...vestige-web-v0.4.0) (2026-07-09)
 
 
