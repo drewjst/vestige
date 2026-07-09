@@ -316,8 +316,9 @@
     <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
     <span class="ln"></span><b class="ct">Storm tracks</b> (IBTrACS)<br>
     <span class="cty"></span><b class="cy">County storm impacts</b> (NOAA Storm Events)<br>
-    <span class="legend-note">Storm events: United States. Territory events appear as recorded points;
-      territory place dossiers are not yet available.</span><br>
+    <!-- LOCKED copy, byte-exact — kept on one source line so textContent carries no stray
+         whitespace/newlines from HTML formatting. -->
+    <span class="legend-note">Storm events: United States. Territory events appear as recorded points; territory place dossiers are not yet available.</span><br>
     click any event
   </div>
   <div id="honest-toast" class="honest-toast" role="status"></div>
@@ -383,13 +384,15 @@
     <div class="summary" id="c-count"></div>
     <p class="c-note" id="c-note"></p>
     <div class="clist" id="c-list"></div>
-    <!-- Static per Task 10 item 3c: earthquakes + storm tracks aren't nationally complete yet, so
-         their true extent can't be claimed here. TODO(live-fetch milestone): drive these two lines
-         from /api/coverage's feed extents once the county dossier fetch path is wired to that
-         endpoint (see api/main.py's /api/coverage — feeds[].spatial extent) instead of hardcoding. -->
+    <!-- Per-feed extent honesty, static for A1; every string here is LOCKED copy, byte-exact — do
+         not reword, re-punctuate, or split across source lines (textContent must match exactly).
+         TODO(live-fetch milestone): drive the earthquake/storm-track lines from /api/coverage's
+         feed extents once the county dossier fetch path is wired to that endpoint (see
+         api/main.py's /api/coverage — feeds[].spatial extent) instead of hardcoding. -->
     <div class="c-coverage">
-      <p>Earthquakes: selected regions only.</p>
-      <p>Storm tracks: selected storms only.</p>
+      <p>Storm events: United States. Territory events appear as recorded points; territory place dossiers are not yet available.</p>
+      <p>Earthquakes: selected regions only</p>
+      <p>Storm tracks: selected storms only</p>
     </div>
   </aside>
 
@@ -617,12 +620,14 @@
           "line-opacity": 0.9, "line-blur": 0.3
         }
       });
-      // NOTE: the tile schema (events source-layer: event_id, hazard_class, geom_precision, year —
-      // see task-8-report.md) does not carry intensity_value, unlike the old /api/events GeoJSON.
-      // ["get","intensity_value"] resolves to null on every feature, so coalesce falls through to
-      // the constant 3 and every quake renders at the SAME fixed radius rather than scaled by
-      // magnitude — a real visual regression, not a fabrication (nothing here invents a magnitude).
-      // Flagged for a follow-up tile rebake if magnitude-scaled sizing is wanted back.
+      // Magnitude-driven sizing, coalesce-guarded (Task 10 review ruling): the Task 11 ship bake
+      // adds `intensity_value` to the events source-layer's properties; against THOSE tiles the
+      // interpolate below scales each quake by its recorded magnitude, keeping the legend's
+      // "size = magnitude" claim true. Against the current SPIKE tiles (schema: event_id,
+      // hazard_class, geom_precision, year — see task-8-report.md) the property is absent, so
+      // ["get","intensity_value"] is null on every feature and coalesce falls to the constant 3 —
+      // an honest fixed radius, never a fabricated magnitude. Same expression, both eras; nothing
+      // here needs to change when the ship bake lands.
       map.addLayer({
         id: "quakes-glow", type: "circle", source: "tiles", "source-layer": "events",
         filter: ["==", ["get", "geom_precision"], "observed_point"],
@@ -712,6 +717,11 @@
       // ARCHIVE itself is actually reachable is determined below via the source's own load/error
       // events, same honest-failure contract as the old /api/events fetch had.
       addDataLayers();
+      // A deep-linked dossier (?place=/?q= — see handleUrlParams) can resolve and call
+      // setSelectedCounty BEFORE this first addDataLayers(): its getLayer guard makes that a no-op,
+      // and unlike a theme toggle the INITIAL load path has no style.load re-run to re-apply it —
+      // so without this line a deep-linked county opens its dossier with no amber fill.
+      setSelectedCounty(selectedPlaceId);
       for (const id of ["counties-hit", "tracks", "quakes"]) {
         map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
         map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
@@ -1068,12 +1078,15 @@
 
     // A county click opens a place dossier: the county + the list of events recorded there. Each
     // list row drills into that event's own dossier (which stacks above this panel).
-    // Returns true/false (success), so deep-link/search callers can react honestly to a bad
-    // place_id (e.g. a stale/mistyped ?place= URL) instead of silently no-oping — see goToPlace and
-    // handleUrlParams below. Existing callers (map click) ignore the return value; unchanged for them.
+    // Returns true (opened) | "notfound" (a real 404 — no such place) | false (any other failure:
+    // network down, 5xx, bad JSON), so deep-link/search callers can react honestly AND accurately —
+    // "no county matched" and "the API is unreachable" are different truths and must get different
+    // copy (see handleUrlParams below). Existing callers (map click, search selection) ignore the
+    // return value; unchanged for them.
     async function openPlace(placeId) {
       try {
         const res = await fetch(API_BASE + "/api/place/" + encodeURIComponent(placeId));
+        if (res.status === 404) return "notfound";
         if (!res.ok) throw new Error("place fetch failed: " + res.status);
         const place = await res.json();
         showCountyDossier(place);
@@ -1112,8 +1125,19 @@
     let searchDebounceTimer = null;
     let searchResults = [];
     let searchActiveIndex = -1;
+    // Monotonic request token: bumped by every new lookup AND by closeSearchResults, and checked
+    // again after the await in runSearch. Kills two stale-response bugs at once: a SLOW earlier
+    // query ("bun") resolving after a FAST later one ("buncombe") already rendered must not
+    // overwrite it, and a response landing after the user selected a result / cleared the input
+    // must not reopen the dropdown.
+    let searchSeq = 0;
 
     function closeSearchResults() {
+      // A pending debounce timer must not fire and reopen the list ~280ms after it was closed
+      // (selection and input-cleared both route through here) — and the token bump invalidates
+      // any lookup already in flight for the same reason.
+      clearTimeout(searchDebounceTimer);
+      searchSeq++;
       const el = $("search-results");
       el.innerHTML = "";
       el.classList.remove("open");
@@ -1166,11 +1190,14 @@
     async function runSearch(q) {
       q = q.trim();
       if (q.length < 2) { closeSearchResults(); return; }
+      const seq = ++searchSeq;
       try {
-        renderSearchResults(await placeLookup(q));
+        const matches = await placeLookup(q);
+        if (seq !== searchSeq) return;  // superseded or closed while in flight — never render stale
+        renderSearchResults(matches);
       } catch (err) {
         console.error("place-lookup failed", err);
-        closeSearchResults();
+        if (seq === searchSeq) closeSearchResults();
       }
     }
 
@@ -1243,16 +1270,32 @@
         sourceLayer: "counties",
         filter: ["==", ["get", "place_id"], placeId]
       });
-      const feat = feats.find((f) => f.geometry);
-      if (!feat) return false;
+      // A county straddling a tile boundary comes back as MULTIPLE features — one clipped fragment
+      // per tile. Framing only the first fragment would fit half (or less) of the county, so
+      // accumulate the extent across EVERY fragment before fitting.
+      let bounds = null;
+      for (const f of feats) {
+        if (!f.geometry) continue;
+        const b = geometryBounds(f.geometry);
+        if (!bounds) {
+          bounds = b;
+        } else {
+          if (b[0][0] < bounds[0][0]) bounds[0][0] = b[0][0];
+          if (b[0][1] < bounds[0][1]) bounds[0][1] = b[0][1];
+          if (b[1][0] > bounds[1][0]) bounds[1][0] = b[1][0];
+          if (b[1][1] > bounds[1][1]) bounds[1][1] = b[1][1];
+        }
+      }
+      if (!bounds) return false;
       try {
-        map.fitBounds(geometryBounds(feat.geometry), { padding: 80, duration: 1000, maxZoom: 9 });
+        map.fitBounds(bounds, { padding: 80, duration: 1000, maxZoom: 9 });
         return true;
       } catch (err) {
         console.error("fitBounds failed for", placeId, err);
         return false;
       }
     }
+    window.flyToPlaceIfKnown = flyToPlaceIfKnown;  // exposed for tests (same pattern as openPlace)
 
     // The shared "select a place" entry point for search selection and deep links: fly (best-
     // effort, see flyToPlaceIfKnown) + open its dossier. Queuing the fly via onTilesReady means a
@@ -1271,9 +1314,14 @@
       const placeParam = params.get("place");
       const qParam = params.get("q");
       if (placeParam) {
-        const ok = await goToPlace(placeParam);
-        if (!ok) {
+        const r = await goToPlace(placeParam);
+        if (r === "notfound") {
+          // A real 404: the place id genuinely doesn't exist — a no-match is the honest message.
           showHonestToast("No county matched '" + placeParam + "' — try your county's name.");
+        } else if (r !== true) {
+          // Anything else (network down, 5xx, bad JSON) is NOT a no-match — saying "no county
+          // matched" about an API we couldn't reach would be its own small lie.
+          showHonestToast("Search is unavailable right now — try again shortly.");
         }
         return;
       }
@@ -1284,7 +1332,11 @@
         try {
           const matches = await placeLookup(q);
           if (matches.length === 1) {
-            await goToPlace(matches[0].place_id);
+            // The lookup FOUND this county, so a failure here (404 included — found-then-vanished
+            // is an API inconsistency, not a no-match) must not silently no-op either.
+            if (await goToPlace(matches[0].place_id) !== true) {
+              showHonestToast("Search is unavailable right now — try again shortly.");
+            }
           } else if (matches.length > 1) {
             renderSearchResults(matches);
           } else {
@@ -1319,6 +1371,9 @@
     });
 
     handleUrlParams();
+    // Exposed (same pattern as openEvent/openPlace): re-runnable against a pushState'd URL for
+    // tests, and the natural hook if history-based navigation is ever added.
+    window.handleUrlParams = handleUrlParams;
 
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
