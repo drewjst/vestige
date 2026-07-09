@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vestige-web-static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve@14", "-l", "8787", "."],
+      "port": 8787
+    }
+  ]
+}

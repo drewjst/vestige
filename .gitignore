@@ -6,3 +6,5 @@ site/
 .env
 .env.*
 *.log
+*.pmtiles
+.superpowers/
