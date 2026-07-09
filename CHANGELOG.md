@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/drewjst/vestige/compare/vestige-web-v0.3.0...vestige-web-v0.4.0) (2026-07-09)
+
+
+### Features
+
+* Federal declarations and FEMA honesty on dossiers ([0c62bcd](https://github.com/drewjst/vestige/commit/0c62bcd7fcb1ab83831476646b42cef08866e8b9))
+* Federal declarations group and FEMA honesty copy ([0875c24](https://github.com/drewjst/vestige/commit/0875c248cfd8740e769ca674d8e0c4bfad3f47f5))
+* show Related reading in the event dossier ([61ed872](https://github.com/drewjst/vestige/commit/61ed87205ce79c6e34c66f052c32f9a534f4284f))
+* show Related reading in the event dossier ([b7fa0c3](https://github.com/drewjst/vestige/commit/b7fa0c39fdd732a7e2744d4b0936b73e52e7092a))
+
 ## [0.3.0](https://github.com/drewjst/vestige/compare/vestige-web-v0.2.0...vestige-web-v0.3.0) (2026-07-08)
 
 
