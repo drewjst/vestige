@@ -213,9 +213,10 @@
       font-size:.62rem;cursor:pointer;padding:0}
     .fempty{margin:0;padding:.6rem .85rem;font-family:var(--font-mono);font-size:.62rem;
       color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);display:none}
-    /* Quiet status pill: visible from first paint ("loading records…"), hidden once both fetches
-       in map.on("load") resolve. On an /api/events failure it stays up with honest failure copy —
-       absence of data must never read as absence of events. If the map itself never loads (script
+    /* Quiet status pill: visible from first paint ("loading records…"), hidden once the pmtiles
+       vector source reports loaded inside map.on("load"). If the tile archive is genuinely
+       unreachable it stays up with honest failure copy — absence of data must never read as
+       absence of events (see settleTilesSource below). If the map itself never loads (script
        blocked, initial style/tile fetch failing) a separate failure copy takes over instead — see
        window.vestigeMapLoadFailed in <head> and the map's own initial "error" handling below.
        Built only from existing glass vars so both themes work automatically. */
@@ -594,6 +595,13 @@
       // isSourceLoaded true once ITS tiles finish), and a theme toggle wipes + re-adds this same
       // source, so without the guard this would refire on events that aren't the initial load.
       let tilesSourceSettled = false;
+      // Set on the FIRST successful tile delivery from the archive. Once any tile has arrived, a
+      // later per-tile fetch error cannot mean "the archive is unreachable" — latching the failure
+      // state on one would kill a healthy map for the whole session over a transient hiccup.
+      let firstTileLoaded = false;
+      // Only one archive-liveness probe in flight at a time — the initial viewport fires dozens of
+      // Range requests, and a real outage would otherwise stampede getHeader() probes.
+      let tilesProbePending = false;
       function settleTilesSource(ok, err) {
         if (tilesSourceSettled) return;
         tilesSourceSettled = true;
@@ -614,10 +622,37 @@
         themeSwitchPending = false;
       }
       map.on("sourcedata", (e) => {
-        if (e.sourceId === "tiles" && e.isSourceLoaded) settleTilesSource(true);
+        if (e.sourceId !== "tiles") return;
+        // A tile-scoped sourcedata event marks an individual tile's data arriving — the earliest
+        // proof the archive is actually serving. (isSourceLoaded below can lag this by many tiles.)
+        if (e.tile) firstTileLoaded = true;
+        if (e.isSourceLoaded) settleTilesSource(true);
       });
+      // Failure detection is deliberately NARROWER than "any error with sourceId tiles": this
+      // listener lives for the whole session, and MapLibre surfaces every per-tile fetch stumble
+      // through it. Latching the (settle-once, permanent) failure state off one transient network
+      // error — while the archive itself is healthy — would be the opposite of the honesty
+      // contract: the map would claim "records unavailable" about records it could still fetch.
+      // So: after the first successful tile, errors are log-only (MapLibre retries tiles on its
+      // own). Before it, an error is only a CANDIDATE failure — corroborate by probing the archive
+      // header directly: probe resolves -> archive alive, don't latch; probe rejects -> the archive
+      // is genuinely unreachable, latch the honest failure. (Missing tiles never reach here at all —
+      // pmtiles resolves tiles absent from the archive to empty data, not an error.)
       map.on("error", (e) => {
-        if (e.sourceId === "tiles") settleTilesSource(false, e.error);
+        if (e.sourceId !== "tiles" || tilesSourceSettled) return;
+        if (firstTileLoaded) {
+          console.error("tile fetch error (non-fatal: archive already served tiles)", e.error);
+          return;
+        }
+        if (tilesProbePending) return;
+        tilesProbePending = true;
+        tilesArchive.getHeader().then(() => {
+          tilesProbePending = false;
+          console.error("tile fetch error (non-fatal: archive header probe succeeded)", e.error);
+        }).catch((probeErr) => {
+          tilesProbePending = false;
+          settleTilesSource(false, probeErr || e.error);
+        });
       });
       // Belt-and-suspenders: if neither event above ever fires (an edge case some MapLibre versions
       // can hit on certain fetch failures that don't attach a sourceId), the pill must not be left
