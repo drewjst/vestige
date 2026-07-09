@@ -126,6 +126,10 @@
     .crow .cmeta{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
     .crow .hdate{font-family:var(--font-mono);font-size:.66rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
     .crow .cflag{font-family:var(--font-mono);font-size:.56rem;color:var(--beacon);letter-spacing:.04em}
+    .csection{margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--line)}
+    .csection-h{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--ink-3);margin-bottom:.35rem}
+    .csection-note{font-size:.72rem;color:var(--ink-4);line-height:1.4;margin:0 0 .5rem}
     .p-head{display:flex;justify-content:space-between;align-items:flex-start;padding:1.4rem 1.4rem 0}
     .eyebrow{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
     #close{background:none;border:0;color:var(--ink-3);font-size:1.4rem;cursor:pointer;line-height:1}
@@ -751,36 +755,57 @@
       }
     });
 
+    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
+    const truthy = (o, k) => o[k] === true || o[k] === "true";
+
     // County dossier: the county + a click-through list of the events recorded there. event_count is
     // "how many events", NOT a summed impact (deaths/damage stay itemized on each event's own dossier).
+    // FEMA designations group under Federal declarations — administrative, never a loss measure.
     function showCountyDossier(place) {
       $("c-name").textContent = place.name + (place.state ? ", " + place.state : "");
       const n = place.event_count;
       $("c-count").textContent = n + " recorded " + (n === 1 ? "event" : "events") +
         " — click one for its dossier";
-      $("c-list").innerHTML = (place.events || []).map((e) => {
+      const all = place.events || [];
+      const fema = all.filter((e) => e.source === "fema");
+      const other = all.filter((e) => e.source !== "fema");
+      function rowHtml(e) {
         const type = (e.hazard_type || "event").replace(/_/g, " ");
         const date = (e.time || "").slice(0, 10);
-        const flag = truthy(e, "impact_source_present") ? '<span class="cflag">impact ✓</span>' : "";
+        // FEMA is administrative only — never an impact ✓, even if a bad payload claims otherwise.
+        const flag = e.source !== "fema" && truthy(e, "impact_source_present")
+          ? '<span class="cflag">impact ✓</span>' : "";
         return `<div class="crow" data-id="${e.event_id}"><span class="htype">${type}</span>` +
                `<span class="cmeta"><span class="hdate">${date}</span>${flag}</span></div>`;
-      }).join("");
+      }
+      let html = other.map(rowHtml).join("");
+      if (fema.length) {
+        html += `<div class="csection">` +
+          `<div class="csection-h">Federal declarations</div>` +
+          `<p class="csection-note">Declared by FEMA — administrative designation, not a measure of losses.</p>` +
+          fema.map(rowHtml).join("") +
+          `</div>`;
+      }
+      $("c-list").innerHTML = html;
       $("c-list").querySelectorAll(".crow").forEach((el) => {
         el.onclick = () => openEvent(el.dataset.id);
       });
       countyPanel.classList.add("open");
     }
 
-    // MapLibre can stringify GeoJSON property values, so coerce honesty booleans in one place.
-    const truthy = (o, k) => o[k] === true || o[k] === "true";
-
     // What each source can and cannot tell you — used to word impact-absence truthfully per source.
     const IMPACT_SILENCE = {
       usgs: "USGS catalogs magnitude and location, not casualties or damage",
       ibtracs: "IBTrACS records the storm's track and intensity, not on-the-ground losses",
-      storm_events: "this source records location and intensity, not itemized impact"
+      storm_events: "this source records location and intensity, not itemized impact",
+      fema: "FEMA declarations are administrative designations, not a measure of losses"
     };
-    const SRC_LABEL = { usgs: "USGS record", ibtracs: "NHC report", storm_events: "NCEI Storm Events record" };
+    const SRC_LABEL = {
+      usgs: "USGS record",
+      ibtracs: "NHC report",
+      storm_events: "NCEI Storm Events record",
+      fema: "FEMA declaration"
+    };
 
     // Human labels for the itemized event_impact kinds. Damage kinds render as as-recorded USD.
     const IMPACT_LABEL = {
@@ -879,17 +904,25 @@
         ? "This record reaches back to " + p.record_begins.slice(0, 4)
         : "";
       // impact honesty: itemized facts when the source recorded them; otherwise absence shown AS
-      // DATA, never as an implied zero — worded per source.
-      const impactHtml = renderImpact(p.impact);
+      // DATA, never as an implied zero — worded per source. FEMA never mixes into impact rows.
       const silence = IMPACT_SILENCE[p.source] || "this source records location and intensity, not impact";
-      $("p-impact-list").innerHTML = impactHtml;
-      if (impactHtml) {
-        $("p-impact").style.display = "none";
-      } else {
+      if (p.source === "fema") {
+        $("p-impact-list").innerHTML = "";
         $("p-impact").style.display = "";
-        $("p-impact").innerHTML = hasImpact
-          ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
-          : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+        $("p-impact").innerHTML =
+          "<b>Declared by FEMA — administrative designation, not a measure of losses.</b> " +
+          IMPACT_SILENCE.fema + " — this is missing data, not zero.";
+      } else {
+        const impactHtml = renderImpact(p.impact);
+        $("p-impact-list").innerHTML = impactHtml;
+        if (impactHtml) {
+          $("p-impact").style.display = "none";
+        } else {
+          $("p-impact").style.display = "";
+          $("p-impact").innerHTML = hasImpact
+            ? "<b>Impact:</b> recorded by this source; no itemized figures for this event."
+            : "<b>Impact not recorded by this source.</b> " + silence + " — this is missing data, not zero.";
+        }
       }
       // source trail: link straight to the server-provided authoritative record (no client derivation).
       const link = $("p-srclink");
