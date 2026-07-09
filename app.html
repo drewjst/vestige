@@ -363,20 +363,57 @@
     ];
     // Fetched once, immediately, in parallel with everything else below — never gated on the map or
     // tile source. Resolves to the parsed aggregates object, or null on any failure (bad status,
-    // network error, unparseable body). initFilterUI() awaits this; nothing else should — read
+    // network error, unparseable body, valid-JSON-but-wrong-shape, or a hung response — see the
+    // shape check and timeout below). initFilterUI() awaits this; nothing else should — read
     // `aggregates` (set once this settles) instead of re-awaiting the promise.
     let aggregates = null;
-    const aggregatesPromise = fetch(AGGREGATES_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error("aggregates.json fetch failed: " + r.status);
-        return r.json();
-      })
-      .then((data) => { aggregates = data; return data; })
-      .catch((err) => {
-        console.error("failed to load aggregates.json — chips fall back to the known-classes " +
-          "constant, count line stays hidden", err);
-        return null;
-      });
+    let aggregatesFetchSettled = false;
+    const aggregatesPromise = Promise.race([
+      fetch(AGGREGATES_URL)
+        .then((r) => {
+          if (!r.ok) throw new Error("aggregates.json fetch failed: " + r.status);
+          return r.json();
+        })
+        .then((data) => {
+          // Shape validation — the same discipline the old /api/events fetch had: any truthy JSON
+          // body is NOT an aggregates artifact. A misconfigured host returning e.g. {"error": "..."}
+          // as 200 would otherwise flow into updateCount() and render "undefined of undefined
+          // events match" — a silently fabricated count line, the exact class of lie the honesty
+          // contract forbids. Valid JSON with the wrong shape must fail exactly like a rejected
+          // fetch: throw into the catch below → null → the already-honest hidden/fallback state.
+          if (!data || typeof data.total_events !== "number" ||
+              !data.by_hazard_class || typeof data.by_hazard_class !== "object" ||
+              typeof data.year_min !== "number" || typeof data.year_max !== "number") {
+            throw new Error("aggregates.json has an unexpected shape — refusing to use it");
+          }
+          aggregatesFetchSettled = true;
+          aggregates = data;
+          return data;
+        })
+        .catch((err) => {
+          aggregatesFetchSettled = true;
+          console.error("failed to load aggregates.json — chips fall back to the known-classes " +
+            "constant, count line stays hidden", err);
+          return null;
+        }),
+      // A hung response (server accepts the connection but never finishes the body) would leave
+      // this promise pending forever — and initFilterUI() awaits it BEFORE wiring the filter
+      // pill's onclick, so the pill would sit visible but permanently dead. 15s cap, symmetric
+      // with the tile source's own 15s settle guarantee; resolves null = the same honest fallback
+      // state as any other aggregates failure. The settled flag keeps the loser-timer honest: on
+      // any load where the fetch already settled (success OR failure), the timer must be a silent
+      // no-op — logging "timed out" on a healthy load would be its own small lie. (If the fetch
+      // wins its own race with the network only after this timeout fired, its .then still sets
+      // `aggregates` — harmless: updateCount() reads it live and simply starts showing real counts
+      // on the next filter interaction; nothing re-renders a stale lie in the meantime.)
+      new Promise((resolve) => setTimeout(() => {
+        if (!aggregatesFetchSettled) {
+          console.error("aggregates.json fetch timed out after 15s — chips fall back to the " +
+            "known-classes constant, count line stays hidden");
+        }
+        resolve(null);
+      }, 15000))
+    ]);
 
     // MapLibre paint values are JS, not CSS — this object drives both basemaps' layer paint.
     // Kept in sync with the CSS token pairs above (dark literals match the :root values; light
@@ -855,9 +892,11 @@
           ? [...selectedHazards].reduce((sum, c) => sum + (aggregates.by_hazard_class[c] || 0), 0)
           : total;
       }
+      // toLocaleString: "69,983", not "69983" — these are national-scale totals and the raw
+      // digit run misreads at a glance.
       textEl.innerHTML = (n !== null)
-        ? `<b>${n}</b> of ${total} events match`
-        : `<b>${total}</b> recorded events &middot; filters applied`;
+        ? `<b>${n.toLocaleString()}</b> of ${total.toLocaleString()} events match`
+        : `<b>${total.toLocaleString()}</b> recorded events &middot; filters applied`;
       // fcount-text has no CSS-class default (a plain <span>, "" correctly falls back to inline);
       // filter-footnote/filter-empty are both CSS-authored `display:none` by default (see .ffoot/
       // .fempty above — the panel must open with the empty message invisible until proven true), so
