@@ -160,6 +160,13 @@
        this just gives it its own visual weight (quieter than the feed lines above, still legible)
        since it's a caveat, not a legend key entry. */
     .legend-note{display:inline-block;margin-top:.4rem;color:var(--ink-3);font-size:.62rem;line-height:1.5}
+    /* Legend rows that toggle a data layer on/off. The map opens CLEAN (points + tracks hidden —
+       all-on at national zoom is an unreadable wall); a dimmed row means that layer is OFF. */
+    .leg-toggle{cursor:pointer;user-select:none;transition:opacity .15s;border-radius:3px}
+    .leg-toggle.off{opacity:.4}
+    .leg-toggle:hover{opacity:.85}
+    .leg-toggle.off:hover{opacity:.62}
+    .leg-hint{display:inline-block;margin-top:.35rem;color:var(--ink-3);font-size:.6rem;font-style:italic;opacity:.85}
 
     aside{
       position:absolute;top:0;right:0;z-index:6;width:min(380px,92vw);height:100%;
@@ -330,9 +337,10 @@
     </div>
   </header>
   <div class="legend">
-    <span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude<br>
-    <span class="ln"></span><b class="ct">Storm tracks</b> (IBTrACS)<br>
+    <span class="leg-toggle off" id="leg-points" role="button" tabindex="0" title="Show/hide event points"><span class="dot"></span><b>Earthquakes</b> (USGS) &middot; size = magnitude</span><br>
+    <span class="leg-toggle off" id="leg-tracks" role="button" tabindex="0" title="Show/hide storm tracks"><span class="ln"></span><b class="ct">Storm tracks</b> (IBTrACS)</span><br>
     <span class="cty"></span><b class="cy">County storm impacts</b> (NOAA Storm Events)<br>
+    <span class="leg-hint">tap Earthquakes or Storm tracks to show them</span><br>
     <!-- LOCKED copy, byte-exact — kept on one source line so textContent carries no stray
          whitespace/newlines from HTML formatting. -->
     <span class="legend-note">Storm events: United States. Territory events appear as recorded points; territory place dossiers are not yet available.</span><br>
@@ -436,7 +444,7 @@
     // service, so this is a path, not a different hostname.
     const TILES_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
       ? "vestige.pmtiles"
-      : "/tiles/vestige.pmtiles";
+      : "tiles/vestige.pmtiles";
     // The bake-time aggregates artifact — same origin as the tile archive (same hostname-switch
     // pattern as TILES_URL above; dev is a plain relative path served next to app.html, prod sits
     // alongside the tiles under the app's own bucket). Real, exact, pre-computed national totals —
@@ -445,7 +453,7 @@
     // itself can't (see initFilterUI/updateCount below for why).
     const AGGREGATES_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
       ? "aggregates.json"
-      : "/tiles/aggregates.json";
+      : "tiles/aggregates.json";
     // The known national hazard_class taxonomy (14 classes crosswalked from NWS Directive 10-1605's
     // 48 official Storm Data event types in etl/importers/storm_events.py's HAZARD_CROSSWALK, plus
     // "earthquake" from etl/importers/usgs.py and the crosswalk's own "other" fallback) — used ONLY
@@ -581,6 +589,33 @@
     // Extracted so a theme toggle (which calls map.setStyle(), wiping ALL sources/layers) can
     // rebuild the same sources/layers against the new basemap. Paint always comes from
     // MAP_THEME[currentTheme] — never a literal — so dark/light never drift out of sync.
+    // --- Opt-in data layers (clean-start UX) -------------------------------------------------
+    // The map opens showing only the county base; the amber event points and the (very busy) IBTrACS
+    // cyclone tracks are OFF by default and toggled on from the legend, because all-on at national
+    // zoom is an unreadable wall. State lives here so it survives a theme swap — setTheme wipes+
+    // rebuilds every layer, and addDataLayers() re-reads this to restore what was shown.
+    const LAYER_GROUPS = { points: ["quakes-glow", "quakes"], tracks: ["tracks"] };
+    const layerShown = { points: false, tracks: false };
+    function applyLayerVisibility() {
+      for (const grp in LAYER_GROUPS)
+        for (const id of LAYER_GROUPS[grp])
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", layerShown[grp] ? "visible" : "none");
+    }
+    function wireLayerToggles() {
+      for (const grp of Object.keys(LAYER_GROUPS)) {
+        const el = $("leg-" + grp);
+        if (!el) continue;
+        const flip = () => {
+          layerShown[grp] = !layerShown[grp];
+          applyLayerVisibility();
+          el.classList.toggle("off", !layerShown[grp]);
+        };
+        el.onclick = flip;
+        el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } };
+        el.classList.toggle("off", !layerShown[grp]);   // reflect the default (off)
+      }
+    }
+
     function addDataLayers() {
       // Idempotency guard: a failed theme swap deliberately leaves its "style.load" listener
       // attached (see setTheme below — a late-loading style still needs its data layers), so the
@@ -667,6 +702,10 @@
           "circle-stroke-width": 1, "circle-stroke-color": theme.quakeStroke
         }
       });
+
+      // Apply the opt-in visibility state (points + tracks default OFF) — runs on first load AND
+      // after every theme swap's rebuild, so a toggled-on layer stays on across theme changes.
+      applyLayerVisibility();
     }
 
     // The amber "county has an open dossier" fill — the ONLY thing that draws the attribution fill
@@ -729,6 +768,12 @@
     }
 
     map.on("load", () => {
+      // Guard against a construction-time race where #map had no layout size yet: MapLibre would
+      // pin the canvas to its 400x300 default and, since the container size never subsequently
+      // *changes*, its ResizeObserver never fires to correct it — leaving the map rendered into a
+      // tiny corner and only a handful of tiles ever requested. Re-reading the (now laid-out)
+      // container here is a no-op when the size was already correct.
+      map.resize();
       // The initial-load-only failure path above is now moot — the map has loaded — so tear it
       // down; it must never fire again (in particular, it must not fire on later toggle-time errors).
       map.off("error", onInitialMapError);
@@ -1129,6 +1174,10 @@
     const countyPanel = $("county-panel");
     $("close").onclick = () => panel.classList.remove("open");
     $("cclose").onclick = () => { countyPanel.classList.remove("open"); panel.classList.remove("open"); setSelectedCounty(null); };
+    // Wire the legend layer toggles at page-init (NOT on map-load) so they're always live regardless
+    // of when the map finishes loading; the flip handler's applyLayerVisibility is getLayer-guarded,
+    // so a click before the layers exist just records intent, which addDataLayers() then applies.
+    try { wireLayerToggles(); } catch (e) { console.error("layer-toggle wiring failed", e); }
     $("theme-pill").onclick = () => setTheme(currentTheme === "light" ? "dark" : "light");
 
     // --- Honest no-match / no-op toast (Task 10 item 2) — reused by deep links below. Click-to-
@@ -1420,7 +1469,11 @@
           ? "showing the most recent 500 of " + total.toLocaleString() + " recorded events"
           : "";
       }
-      $("c-list").innerHTML = events.map((e) => {
+      // Split the (already 500-capped) event list: administrative FEMA declarations group under
+      // their own "Federal declarations" heading; everything else renders as impact rows.
+      const fema = events.filter((e) => e.source === "fema");
+      const other = events.filter((e) => e.source !== "fema");
+      function rowHtml(e) {
         const type = (e.hazard_type || "event").replace(/_/g, " ");
         const date = (e.time || "").slice(0, 10);
         // FEMA is administrative only — never an impact ✓, even if a bad payload claims otherwise.
