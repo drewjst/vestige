@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/drewjst/vestige/compare/vestige-web-v0.5.0...vestige-web-v0.5.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **web:** repair broken map + clean-start opt-in layers ([f835020](https://github.com/drewjst/vestige/commit/f8350205bef386b2e8a260181840dac0181acf05))
+
 ## [0.5.0](https://github.com/drewjst/vestige/compare/vestige-web-v0.4.0...vestige-web-v0.5.0) (2026-07-09)
 
 
