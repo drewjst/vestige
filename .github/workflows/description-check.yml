@@ -11,3 +11,7 @@ jobs:
         with:
           api-url: https://api.lema.sh
           github-token: "${{ github.token }}"
+          # Drafts a decision record when a PR settles a real choice — stored in
+          # lema until a maintainer accepts or dismisses it. Delete this line to
+          # run description-checks only.
+          record-decisions: true
